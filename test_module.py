@@ -1,8 +1,8 @@
 from core.model import Model, ModelConfig
 
-config = ModelConfig(n_individuals=60, n_genes=3)
+config = ModelConfig(n_individuals=1000, n_genes=3)
 model = Model(config)
-model.run(200)
+model.run(2000)
 
 model_df = model.datacollector.get_model_vars_dataframe()
 print("Model stats:")

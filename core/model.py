@@ -2,9 +2,10 @@ import mesa
 import numpy as np
 from dataclasses import dataclass
 
-from .enums import DeathCause
+from .enums import DeathCause, Gender
 from .environment import Environment
 from .population import Population
+from .training_buffer import TrainingBuffer
 
 
 @dataclass
@@ -24,17 +25,18 @@ class Model(mesa.Model):
 
         self.population = Population(self, config.n_individuals)
 
+        self.training_buffer = TrainingBuffer()
+
         self.deaths_this_step = {DeathCause.AGE: 0, DeathCause.FITNESS: 0, DeathCause.THRESHOLD: 0}
         self.births_this_step = 0
         self.datacollector = mesa.DataCollector(
             model_reporters={
                 "Step": "step_count",
                 "Generation": lambda m: m.population.generation,
-                "PopulationSize": lambda m: len([a for a in m.agents if a.is_alive]),
+                "PopulationSize": lambda m: m.population.actual_size,
 
-                "AvgFitness": lambda m: float(
-                    np.mean([a.fitness for a in m.agents if a.fitness is not None and a.is_alive] or [0])),
-                "AvgAge": lambda m: float(np.mean([a.age for a in m.agents if a.is_alive])),
+                "AvgFitness": lambda m: m.population.avg_fitness,
+                "AvgAge": lambda m: m.population.avg_age,
 
                 "BirthCount": lambda m: m.births_this_step,
 
@@ -67,8 +69,21 @@ class Model(mesa.Model):
             if len(self.agents) == 0:
                 print(f"Population extinct at step {self.step_count}")
                 break
+
+            if self.population.count_females == 0:
+                print(f"Population extinct at step {self.step_count}, all males died")
+                break
+
+            if self.population.count_males == 0:
+                print(f"Population extinct at step {self.step_count}, all females died")
+                break
+
             print("step", _)
-            print("AvgFitnass", float(self.datacollector.model_reporters["AvgFitness"](self)))
+            print("AvgFitness", float(self.datacollector.model_reporters["AvgFitness"](self)))
+
+            print("FoodCount", float(self.environment.current_params["food_availability"]))
+
+            print("Temperature", float(self.environment.current_params["temperature"]))
 
             print("AvgHeatResistance", float(np.mean([
                 a.genes_map["heat_resistance"]
@@ -85,4 +100,11 @@ class Model(mesa.Model):
                 for a in self.agents if a.is_alive and a.fitness is not None
             ])))
 
+            print("Females", len([s for s in self.agents if s.gender == Gender.FEMALE]))
+
             self.step()
+
+            if _ > 0:
+                self.training_buffer.save("data/training_samples.json")
+                x, y, weights = self.training_buffer.to_numpy()
+                print(f"Training data: x={x.shape}, y={y.shape}")
