@@ -64,7 +64,7 @@ class Model(mesa.Model):
         self.step_count += 1
         self.datacollector.collect(self)
 
-    def run(self, n_steps=100):
+    def run(self, n_steps: int = 100):
         for _ in range(n_steps):
             if len(self.agents) == 0:
                 print(f"Population extinct at step {self.step_count}")

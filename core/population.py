@@ -47,6 +47,25 @@ class Population:
         for agent in dead:
             agent.remove()
 
+    def record_birth(self, child_id: int, p1: Individual, p2: Individual, pre_mutation_genome: np.ndarray,
+                     mutation_deltas: np.ndarray):
+        alive = [a for a in self.model.agents if a.is_alive and a.fitness is not None]
+        self.model.training_buffer.record_birth(
+            child_id=child_id,
+            pre_mutation_genome=pre_mutation_genome,
+            mutation_deltas=mutation_deltas,
+            p1_fitness=p1.fitness,
+            p2_fitness=p2.fitness,
+            env_params=self.model.environment.current_params,
+            env_delta={
+                k: self.model.environment.current_params[k] -
+                   self.model.environment.prev_params.get(k, v)
+                for k, v in self.model.environment.current_params.items()
+            },
+            pop_mean_genome=np.mean([a.genome for a in alive], axis=0),
+            pop_mean_fitness=self.avg_fitness,
+        )
+
     def reproduce(self):
         females = list(a for a in self.model.agents if a.fitness is not None and a.gender == Gender.FEMALE)
         males = list(a for a in self.model.agents if a.fitness is not None and a.gender == Gender.MALE)
@@ -85,22 +104,7 @@ class Population:
                 self.model.agents.add(child)
                 self.model.births_this_step += 1
 
-                alive = [a for a in self.model.agents if a.is_alive and a.fitness is not None]
-                self.model.training_buffer.record_birth(
-                    child_id=child.unique_id,
-                    pre_mutation_genome=pre_mutation_genome,
-                    mutation_deltas=mutation_deltas,
-                    p1_fitness=p1.fitness,
-                    p2_fitness=p2.fitness,
-                    env_params=self.model.environment.current_params,
-                    env_delta={
-                        k: self.model.environment.current_params[k] -
-                           self.model.environment.prev_params.get(k, v)
-                        for k, v in self.model.environment.current_params.items()
-                    },
-                    pop_mean_genome=np.mean([a.genome for a in alive], axis=0),
-                    pop_mean_fitness=self.avg_fitness,
-                )
+                self.record_birth(child.unique_id, p1, p2, pre_mutation_genome, mutation_deltas)
 
     def step(self):
         self.model.agents.shuffle_do("step")
