@@ -24,7 +24,7 @@ class TrainingBuffer:
 
     def __init__(self):
         self.samples: list[TrainingSample] = []
-        self._pending: dict[int, TrainingSample] = {}  # unique_id → sample
+        self._pending: dict[int, TrainingSample] = {}
 
     def record_birth(
             self,

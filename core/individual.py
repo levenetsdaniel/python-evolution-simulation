@@ -1,6 +1,5 @@
 import mesa
 import numpy as np
-import random
 
 from .enums import Gender, DeathCause
 from .fitness import fitness
@@ -17,10 +16,12 @@ class Individual(mesa.Agent):
         self.parent_ids = parent_ids
         self.generation = generation
         self.genes_map = dict(zip(genome_labels, genome))
-        self.gender = random.choice(list(Gender))
+        self.gender = self.model.rng.choice(list(Gender))
         self.death_cause = None
 
         self.age = 0
+        self.food_eaten = 0
+        self.food_need = max(1, int(round((self.genes_map["size"] + self.genes_map["resilience"] * 0.6 + self.genes_map["speed"] * 0.1) * 10)))
         self.fitness = None
         self.is_alive = True
 
@@ -28,11 +29,17 @@ class Individual(mesa.Agent):
         return self.genes_map[item]
 
     @property
-    def n_genes(self):
+    def n_genes(self) -> int:
         return len(self.genome)
 
-    def compute_fitness(self):
-        return fitness(self.genes_map, self.model.environment.current_params)
+    @property
+    def satiation(self) -> float:
+        return self.food_eaten / self.food_need
+
+    def compute_fitness(self) -> float:
+        ind_params = self.genes_map
+        ind_params["satiation"] = self.satiation
+        return fitness(ind_params, self.model.environment.current_params)
 
     def step(self):
         self.fitness = self.compute_fitness()
@@ -54,7 +61,7 @@ class Individual(mesa.Agent):
 
     @classmethod
     def random_init(cls, model: mesa.Model, labels: list[str], generation: int = 0):
-        genome = np.random.rand(5)
+        genome = model.rng.random(len(labels))
         return cls(
             model=model,
             genome=genome,

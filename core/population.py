@@ -1,9 +1,9 @@
 import numpy as np
-import random
 from .enums import DeathCause, Gender
 from .individual import Individual
 
-GENOM_LABELES = ["heat_resistance", "cold_resistance", "metabolic_rate", "resilience", "size"]
+GENOM_LABELES = ["heat_resistance", "cold_resistance", "metabolic_rate", "resilience", "size", "speed",
+                 "aggressiveness"]
 
 
 class Population:
@@ -18,24 +18,28 @@ class Population:
             self.model.agents.add(ind)
 
     @property
-    def count_females(self):
+    def count_females(self) -> int:
         return len([a for a in self.model.agents if a.gender == Gender.FEMALE])
 
     @property
-    def count_males(self):
+    def count_males(self) -> int:
         return len([a for a in self.model.agents if a.gender == Gender.MALE])
 
     @property
-    def actual_size(self):
+    def actual_size(self) -> int:
         return len([a for a in self.model.agents if a.is_alive])
 
     @property
-    def avg_fitness(self):
+    def avg_fitness(self) -> np.floating:
         return np.mean([a.fitness for a in self.model.agents if a.fitness is not None and a.is_alive] or [0])
 
     @property
-    def avg_age(self):
+    def avg_age(self) -> np.floating:
         return np.mean([a.age for a in self.model.agents if a.is_alive])
+
+    @property
+    def avg_satiation(self) -> np.floating:
+        return np.mean([a.satiation for a in self.model.agents if a.is_alive])
 
     def remove_dead(self):
         dead = list(self.model.agents.select(lambda a: not a.is_alive))
@@ -43,6 +47,7 @@ class Population:
             DeathCause.AGE: sum(1 for a in dead if a.death_cause == DeathCause.AGE),
             DeathCause.FITNESS: sum(1 for a in dead if a.death_cause == DeathCause.FITNESS),
             DeathCause.THRESHOLD: sum(1 for a in dead if a.death_cause == DeathCause.THRESHOLD),
+            DeathCause.COMPETITION: sum(1 for a in dead if a.death_cause == DeathCause.COMPETITION)
         }
         for agent in dead:
             agent.remove()
@@ -69,7 +74,7 @@ class Population:
     def reproduce(self):
         females = list(a for a in self.model.agents if a.fitness is not None and a.gender == Gender.FEMALE)
         males = list(a for a in self.model.agents if a.fitness is not None and a.gender == Gender.MALE)
-        n_offspring = len(females) // 4
+        n_offspring = max(2, int(len(females) * self.avg_satiation * 0.4))
         for _ in range(n_offspring):
             if males and females:
                 p1_fitness = [a.fitness for a in females]
@@ -77,17 +82,17 @@ class Population:
                 ranks1 = np.argsort(np.argsort(p1_fitness)) + 1
                 weights1 = ranks1 / ranks1.sum()
 
-                p1 = random.choices(females, weights=weights1)[0]
+                p1 = females[self.model.rng.choice(len(females), p=weights1)]
 
                 p2_fitness = [a.fitness for a in males]
 
                 ranks2 = np.argsort(np.argsort(p2_fitness)) + 1
                 weights2 = ranks2 / ranks2.sum()
 
-                p2 = random.choices(males, weights=weights2)[0]
+                p2 = males[self.model.rng.choice(len(males), p=weights2)]
                 females.remove(p1)
 
-                mask = np.random.rand(len(p1.genome)) > 0.5
+                mask = self.model.rng.random(len(p1.genome)) > 0.5
                 genome = np.where(mask, p1.genome, p2.genome)
                 pre_mutation_genome = genome.copy()
                 genome += np.random.normal(0, 0.12, size=len(genome))
@@ -107,6 +112,16 @@ class Population:
                 self.record_birth(child.unique_id, p1, p2, pre_mutation_genome, mutation_deltas)
 
     def step(self):
+        alive = [a for a in self.model.agents if a.is_alive]
+
+        # temporary diagnostic
+        print(f"food_pool before distribute: {self.model.environment.current_params['food_availability']}")
+        self.model.environment.food_distribution()
+
+        sample = [a for a in alive[:3]]
+        for a in sample:
+            print(f"  agent {a.unique_id}: food_eaten={a.food_eaten}, size={a.genes_map['size']:.2f}")
+
         self.model.agents.shuffle_do("step")
         self.remove_dead()
         self.generation += 1
