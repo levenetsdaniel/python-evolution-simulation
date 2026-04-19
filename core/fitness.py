@@ -25,9 +25,13 @@ def _hazard_score(resilience: float, hazard: float) -> float:
     return np.clip(hazard_score, 0.05, 1.0)
 
 
-def _energy_score(satiation: float, metabolic_rate: float) -> float:
-    efficiency = 1.0 - metabolic_rate * 0.3
-    energy_score = satiation * efficiency
+def _energy_score(satiation: float, resilience: float, metabolic_rate: float, aggressiveness: float) -> float:
+    efficiency = 1.0 - metabolic_rate * 0.5 - resilience * 0.2
+
+    aggression_excess = max(0.0, aggressiveness - metabolic_rate)
+    metabolic_penalty = aggression_excess * 0.1
+
+    energy_score = satiation * efficiency - metabolic_penalty
 
     return np.clip(energy_score, 0.05, 1.0)
 
@@ -36,7 +40,8 @@ def fitness(ind_params: dict, env_params: dict):
     temp_score = _temp_score(ind_params["heat_resistance"], ind_params["cold_resistance"], env_params["temperature"],
                              env_params["optimum_temperature"])
 
-    energy_score = _energy_score(ind_params["satiation"], ind_params["metabolic_rate"])
+    energy_score = _energy_score(ind_params["satiation"], ind_params["resilience"], ind_params["metabolic_rate"],
+                                 ind_params["aggressiveness"])
 
     hazard_score = _hazard_score(ind_params["resilience"], env_params["hazard_level"])
 

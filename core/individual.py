@@ -9,7 +9,7 @@ rng = np.random.default_rng()
 
 class Individual(mesa.Agent):
     def __init__(self, model: mesa.Model, genome: np.ndarray, genome_labels: list[str], parent_ids: tuple | None,
-                 generation: int = 0):
+                 generation: int = 0, age: int = 0):
         super().__init__(model)
         self.genome = np.array(genome, dtype=float)
         self.genome_labels = list(genome_labels)
@@ -19,9 +19,10 @@ class Individual(mesa.Agent):
         self.gender = self.model.rng.choice(list(Gender))
         self.death_cause = None
 
-        self.age = 0
+        self.age = age
         self.food_eaten = 0
-        self.food_need = max(1, int(round((self.genes_map["size"] + self.genes_map["resilience"] * 0.6 + self.genes_map["speed"] * 0.1) * 10)))
+        self.food_need = max(1, int(round((self.genes_map["size"] * 5.0 + self.genes_map["resilience"] * 2.0 + self.genes_map[
+            "speed"] + self.genes_map["aggressiveness"] * 10.0) * 10)))
         self.fitness = None
         self.is_alive = True
 
@@ -60,18 +61,19 @@ class Individual(mesa.Agent):
             return
 
     @classmethod
-    def random_init(cls, model: mesa.Model, labels: list[str], generation: int = 0):
+    def random_init(cls, model: mesa.Model, labels: list[str], generation: int = 0, age: int = 2):
         genome = model.rng.random(len(labels))
         return cls(
             model=model,
             genome=genome,
             genome_labels=labels,
             parent_ids=None,
-            generation=generation
+            generation=generation,
+            age=age
         )
 
     @classmethod
-    def from_parents(cls, model: mesa.Model, p1, p2, genome: np.ndarray, generation: int = 0):
+    def from_parents(cls, model: mesa.Model, p1: "Individual", p2: "Individual", genome: np.ndarray, generation: int = 0):
         return cls(
             model=model,
             genome=genome,

@@ -4,6 +4,7 @@ from .individual import Individual
 
 GENOM_LABELES = ["heat_resistance", "cold_resistance", "metabolic_rate", "resilience", "size", "speed",
                  "aggressiveness"]
+WOUND_BASE = 0.4
 
 
 class Population:
@@ -52,6 +53,38 @@ class Population:
         for agent in dead:
             agent.remove()
 
+    def _death_prob(self, loser, pover_dif):
+        death_prob = WOUND_BASE * abs(pover_dif) * (1.0 - loser.genes_map["resilience"]) * loser.genes_map["aggressiveness"]
+        if self.model.rng.random() < death_prob:
+            loser.is_alive = False
+            loser.death_cause = DeathCause.COMPETITION
+
+    def compete(self, hungry: list, fed: list):
+        for attacker in hungry:
+            if not fed:
+                break
+
+            victim = self.model.rng.choice(fed)
+
+            a_power = attacker.genes_map["size"] + attacker.genes_map["aggressiveness"]
+            v_power = victim.genes_map["size"] + victim.genes_map["aggressiveness"]
+            total = a_power + v_power
+
+            win_prob = a_power / total
+            power_diff = (a_power - v_power) / total
+
+            if self.model.rng.random() < win_prob:
+                steal_coef = np.clip(0.5 + 0.5 * power_diff, 0.1, 0.9)
+                stolen = max(1, int(victim.food_eaten * steal_coef))
+                stolen = min(stolen, victim.food_eaten)
+
+                victim.food_eaten -= stolen
+                attacker.food_eaten += stolen
+
+                self._death_prob(victim, power_diff)
+                if not victim.is_alive:
+                    fed.remove(victim)
+
     def record_birth(self, child_id: int, p1: Individual, p2: Individual, pre_mutation_genome: np.ndarray,
                      mutation_deltas: np.ndarray):
         alive = [a for a in self.model.agents if a.is_alive and a.fitness is not None]
@@ -72,8 +105,8 @@ class Population:
         )
 
     def reproduce(self):
-        females = list(a for a in self.model.agents if a.fitness is not None and a.gender == Gender.FEMALE)
-        males = list(a for a in self.model.agents if a.fitness is not None and a.gender == Gender.MALE)
+        females = list(a for a in self.model.agents if a.fitness is not None and a.gender == Gender.FEMALE and a.age >= 2)
+        males = list(a for a in self.model.agents if a.fitness is not None and a.gender == Gender.MALE and a.age >= 2)
         n_offspring = max(2, int(len(females) * self.avg_satiation * 0.4))
         for _ in range(n_offspring):
             if males and females:
