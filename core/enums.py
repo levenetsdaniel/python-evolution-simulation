@@ -5,6 +5,7 @@ class DeathCause(Enum):
     THRESHOLD = "threshold"
     FITNESS = "fitness"
     AGE = "age"
+    COMPETITION = "competition"
 
 
 class Gender(Enum):

@@ -27,7 +27,7 @@ class Model(mesa.Model):
 
         self.training_buffer = TrainingBuffer()
 
-        self.deaths_this_step = {DeathCause.AGE: 0, DeathCause.FITNESS: 0, DeathCause.THRESHOLD: 0}
+        self.deaths_this_step = {DeathCause.AGE: 0, DeathCause.FITNESS: 0, DeathCause.THRESHOLD: 0, DeathCause.COMPETITION: 0}
         self.births_this_step = 0
         self.datacollector = mesa.DataCollector(
             model_reporters={
@@ -43,6 +43,7 @@ class Model(mesa.Model):
                 "Deaths_age": lambda m: m.deaths_this_step[DeathCause.AGE],
                 "Deaths_fitness": lambda m: m.deaths_this_step[DeathCause.FITNESS],
                 "Deaths_threshold": lambda m: m.deaths_this_step[DeathCause.THRESHOLD],
+                "Deaths_competition": lambda m: m.deaths_this_step[DeathCause.COMPETITION],
                 "Deaths_total": lambda m: sum(m.deaths_this_step.values()),
             },
 
@@ -95,12 +96,32 @@ class Model(mesa.Model):
                 for a in self.agents if a.is_alive and a.fitness is not None
             ])))
 
+            print("AvgSize", float(np.mean([
+                a.genes_map["size"]
+                for a in self.agents if a.is_alive and a.fitness is not None
+            ])))
+
+            print("AvgSpeed", float(np.mean([
+                a.genes_map["speed"]
+                for a in self.agents if a.is_alive and a.fitness is not None
+            ])))
+
             print("AvgResilience", float(np.mean([
                 a.genes_map["resilience"]
                 for a in self.agents if a.is_alive and a.fitness is not None
             ])))
 
-            print("Females", len([s for s in self.agents if s.gender == Gender.FEMALE]))
+            print("AvgAggressivness", float(np.mean([
+                a.genes_map["aggressiveness"]
+                for a in self.agents if a.is_alive and a.fitness is not None
+            ])))
+
+            print("AvgSize", float(np.mean([
+                a.genes_map["size"]
+                for a in self.agents if a.is_alive and a.fitness is not None
+            ])))
+
+            print("Females", len([s for s in self.agents if s.gender == Gender.FEMALE]), "\n")
 
             self.step()
 

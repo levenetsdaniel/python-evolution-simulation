@@ -4,23 +4,47 @@ MIN_TEMPERATURE = -30.0
 MAX_TEMPERATURE = 50.0
 
 
-def fitness(ind_params: dict, env_params: dict):
-    temperature_norm = (env_params["temperature"] - MIN_TEMPERATURE) / (MAX_TEMPERATURE - MIN_TEMPERATURE)
-    delta = temperature_norm - 0.625
-    temperature_intensity = abs(delta / 0.625)
-    if delta > 0.0:
-        temperature_score = 1 - temperature_intensity * (1 - ind_params["heat_resistance"]) * ind_params["cold_resistance"]
-    elif delta < 0.0:
-        temperature_score = 1 - temperature_intensity * (1 - ind_params["cold_resistance"]) * ind_params["heat_resistance"]
+def _temp_score(heat_res: float, cold_res: float, temp: float, optimum: float) -> float:
+    temp_norm = (temp - MIN_TEMPERATURE) / (MAX_TEMPERATURE - MIN_TEMPERATURE)
+    delta = temp_norm - 0.625
+    temp_intensity = abs(delta / 0.625)
+    if delta >= 0:
+        temp_res = 1 - temp_intensity * (1 - heat_res) * cold_res
     else:
-        temperature_score = ind_params["heat_resistance"] * ind_params["cold_resistance"]
+        temp_res = 1 - temp_intensity * (1 - cold_res) * heat_res
 
-    food_need = ind_params["metabolic_rate"] * (1 + ind_params["size"])
-    food_gathered = env_params["food_availability"] * (0.5 + 0.5 * ind_params["size"])
-    energy_score = np.clip(food_gathered - food_need, 0, 1)
+    temp_score = np.exp(- ((temp_res - 1.0) ** 2) / 0.5)
 
-    hazard_score = 1 - env_params["hazard_level"] * (1 - ind_params["resilience"]) * 0.1
+    return np.clip(temp_score, 0.05, 1.0)
 
-    fitness_score = temperature_score * energy_score * hazard_score
+
+def _hazard_score(resilience: float, hazard: float) -> float:
+    fragility = hazard * (1.0 - resilience)
+    hazard_score = np.exp(-fragility ** 2)
+
+    return np.clip(hazard_score, 0.05, 1.0)
+
+
+def _energy_score(satiation: float, resilience: float, metabolic_rate: float, aggressiveness: float) -> float:
+    efficiency = 1.0 - metabolic_rate * 0.5 - resilience * 0.2
+
+    aggression_excess = max(0.0, aggressiveness - metabolic_rate)
+    metabolic_penalty = aggression_excess * 0.1
+
+    energy_score = satiation * efficiency - metabolic_penalty
+
+    return np.clip(energy_score, 0.05, 1.0)
+
+
+def fitness(ind_params: dict, env_params: dict):
+    temp_score = _temp_score(ind_params["heat_resistance"], ind_params["cold_resistance"], env_params["temperature"],
+                             env_params["optimum_temperature"])
+
+    energy_score = _energy_score(ind_params["satiation"], ind_params["resilience"], ind_params["metabolic_rate"],
+                                 ind_params["aggressiveness"])
+
+    hazard_score = _hazard_score(ind_params["resilience"], env_params["hazard_level"])
+
+    fitness_score = temp_score * energy_score * hazard_score
 
     return fitness_score
