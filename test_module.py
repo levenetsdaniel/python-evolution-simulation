@@ -1,8 +1,8 @@
-from core.model import Model, ModelConfig
+from core.model import Model
+from config.sim_config import SimConfig
 
-config = ModelConfig(n_individuals=500, n_genes=3)
-model = Model(config)
-model.run(100)
+model = Model(SimConfig())
+model.run(600)
 
 model_df = model.datacollector.get_model_vars_dataframe()
 print("Model stats:")

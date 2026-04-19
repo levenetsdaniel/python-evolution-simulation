@@ -1,39 +1,39 @@
 import numpy as np
+from config.sim_config import FitnessConfig
 
-MIN_TEMPERATURE = -30.0
-MAX_TEMPERATURE = 50.0
+config = FitnessConfig()
 
 
 def _temp_score(heat_res: float, cold_res: float, temp: float, optimum: float) -> float:
-    temp_norm = (temp - MIN_TEMPERATURE) / (MAX_TEMPERATURE - MIN_TEMPERATURE)
-    delta = temp_norm - 0.625
-    temp_intensity = abs(delta / 0.625)
+    temp_norm = (temp - config.min_temperature) / (config.max_temperature - config.min_temperature)
+    delta = temp_norm - config.temp_20_norm
+    temp_intensity = abs(delta / config.temp_20_norm)
     if delta >= 0:
         temp_res = 1 - temp_intensity * (1 - heat_res) * cold_res
     else:
         temp_res = 1 - temp_intensity * (1 - cold_res) * heat_res
 
-    temp_score = np.exp(- ((temp_res - 1.0) ** 2) / 0.5)
+    temp_score = np.exp(- ((temp_res - optimum) ** 2) / config.temp_score_sharpness)
 
-    return np.clip(temp_score, 0.05, 1.0)
+    return np.clip(temp_score, config.score_floor, 1.0)
 
 
 def _hazard_score(resilience: float, hazard: float) -> float:
     fragility = hazard * (1.0 - resilience)
     hazard_score = np.exp(-fragility ** 2)
 
-    return np.clip(hazard_score, 0.05, 1.0)
+    return np.clip(hazard_score, config.score_floor, 1.0)
 
 
 def _energy_score(satiation: float, resilience: float, metabolic_rate: float, aggressiveness: float) -> float:
-    efficiency = 1.0 - metabolic_rate * 0.5 - resilience * 0.2
+    efficiency = 1.0 - metabolic_rate * config.metabolic_rate_efficiency_penalty - resilience * config.resilience_efficiency_penalty
 
     aggression_excess = max(0.0, aggressiveness - metabolic_rate)
-    metabolic_penalty = aggression_excess * 0.1
+    metabolic_penalty = aggression_excess * config.aggression_metabolic_penalty
 
     energy_score = satiation * efficiency - metabolic_penalty
 
-    return np.clip(energy_score, 0.05, 1.0)
+    return np.clip(energy_score, config.score_floor, 1.0)
 
 
 def fitness(ind_params: dict, env_params: dict):

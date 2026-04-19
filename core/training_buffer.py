@@ -2,6 +2,7 @@ import numpy as np
 import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
+from config.sim_config import EnvironmentConfig
 
 
 @dataclass
@@ -19,8 +20,8 @@ class TrainingSample:
 
 
 class TrainingBuffer:
-    MIN_TEMPERATURE = -30.0
-    MAX_TEMPERATURE = 50.0
+    MIN_TEMPERATURE = EnvironmentConfig().min_temperature
+    MAX_TEMPERATURE = EnvironmentConfig().max_temperature
 
     def __init__(self):
         self.samples: list[TrainingSample] = []

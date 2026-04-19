@@ -1,22 +1,18 @@
 import numpy as np
-
-WOUND_BASE = 0.4
-MAX_FOOD_BASE = 200000
-REGEN_RATE = 5000
-MAX_CAPACITY = 2000
+from config.sim_config import EnvironmentConfig
 
 
 class Environment:
     def __init__(self, model, config=None):
         self.model = model
-        self.config = config or {}
+        self.config = config or EnvironmentConfig()
 
         self.time = 0
         self.current_params = {
-            "temperature": 20.0,
-            "optimum_temperature": 0.5,
-            "food_availability": 5000,
-            "hazard_level": 0.1
+            "temperature": self.config.temp_start,
+            "optimum_temperature": self.config.optimum_temp_start,
+            "food_availability": self.config.food_availability,
+            "hazard_level": self.config.hazard_level_start,
         }
         self.prev_params = self.current_params.copy()
 
@@ -47,12 +43,14 @@ class Environment:
         self.prev_params = self.current_params.copy()
         self.time += 1
 
-        self.current_params["temperature"] += 0.05
-        self.current_params["optimum_temperature"] += 0.00125
-        if self.current_params["temperature"] >= 50.0:
-            self.current_params["temperature"] = -5.0
-            self.current_params["optimum_temperature"] = 0.1
+        self.current_params["temperature"] += self.config.temp_step
+        self.current_params["optimum_temperature"] += self.config.optimum_temp_step
+        if self.current_params["temperature"] >= self.config.max_temperature:
+            self.current_params["temperature"] = self.config.temp_reset
+            self.current_params["optimum_temperature"] = self.config.optimum_temp_reset
 
-        self.current_params["hazard_level"] += 0.001
+        self.current_params["hazard_level"] += self.config.hazard_step
 
-        self.current_params["food_availability"] = REGEN_RATE
+        self.current_params["food_availability"] = self.config.food_availability
+
+        self.food_distribution()

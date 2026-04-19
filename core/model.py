@@ -1,29 +1,21 @@
 import mesa
 import numpy as np
-from dataclasses import dataclass
+from config.sim_config import SimConfig
 
 from .enums import DeathCause, Gender
 from .environment import Environment
 from .population import Population
 from .training_buffer import TrainingBuffer
 
-
-@dataclass
-class ModelConfig:
-    n_individuals: int = 100
-    n_genes: int = 5
-    initial_temp: float = 20.0
-
-
 class Model(mesa.Model):
-    def __init__(self, config: ModelConfig = None):
-        super().__init__(seed=42)
-        self.config = config or ModelConfig()
+    def __init__(self, config = None):
+        self.config = config or SimConfig()
+        super().__init__(seed=self.config.seed)
         self.step_count = 0
 
-        self.environment = Environment(self)
+        self.environment = Environment(self, config=self.config.environment)
 
-        self.population = Population(self, config.n_individuals)
+        self.population = Population(self, config=self.config.population)
 
         self.training_buffer = TrainingBuffer()
 
@@ -126,6 +118,6 @@ class Model(mesa.Model):
             self.step()
 
             if _ > 0:
-                self.training_buffer.save("data/training_samples.json")
+                self.training_buffer.save(self.config.output_path)
                 x, y, weights = self.training_buffer.to_numpy()
                 print(f"Training data: x={x.shape}, y={y.shape}")
