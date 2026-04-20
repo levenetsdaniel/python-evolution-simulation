@@ -1,0 +1,23 @@
+from config.cli import parse_args
+from core.model import Model
+
+if __name__ == "__main__":
+    config = parse_args()
+    model = Model(config)
+    model.run(config.n_steps)
+
+    model_df = model.datacollector.get_model_vars_dataframe()
+
+    if config.steps_info:
+        print("Model stats:")
+        print(model_df.tail(config.population_info))
+
+    if config.population_info:
+        print("Population stats:")
+        print(model_df.describe())
+
+
+    agent_df = model.datacollector.get_agent_vars_dataframe()
+    if config.individual_info:
+        print("\nAgent stats:")
+        print(agent_df.describe())

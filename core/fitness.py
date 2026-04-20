@@ -1,11 +1,12 @@
 import numpy as np
-from config.sim_config import FitnessConfig
+from config.sim_config import FitnessConfig, EnvironmentConfig
 
 config = FitnessConfig()
+env_config = EnvironmentConfig()
 
 
 def _temp_score(heat_res: float, cold_res: float, temp: float, optimum: float) -> float:
-    temp_norm = (temp - config.min_temperature) / (config.max_temperature - config.min_temperature)
+    temp_norm = (temp - env_config.min_temperature) / (env_config.max_temperature - env_config.min_temperature)
     delta = temp_norm - config.temp_20_norm
     temp_intensity = abs(delta / config.temp_20_norm)
     if delta >= 0:

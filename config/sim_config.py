@@ -42,8 +42,6 @@ class IndividualConfig:
 
 @dataclass
 class FitnessConfig:
-    min_temperature: float = -30.0
-    max_temperature: float = 50.0
     temp_20_norm: float = 0.625
     temp_score_sharpness: float = 0.5
     metabolic_rate_efficiency_penalty: float = 0.5
@@ -57,6 +55,9 @@ class SimConfig:
     environment: EnvironmentConfig = field(default_factory=EnvironmentConfig)
     population: PopulationConfig = field(default_factory=PopulationConfig)
     individual: IndividualConfig = field(default_factory=IndividualConfig)
-    n_steps: int = 100
+    n_steps: int = 600
     seed: int = 42
     output_path: str = "data/training_samples.json"
+    steps_info: int = 0
+    population_info: bool = False
+    individual_info: bool = False

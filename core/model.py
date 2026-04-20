@@ -7,10 +7,11 @@ from .environment import Environment
 from .population import Population
 from .training_buffer import TrainingBuffer
 
+
 class Model(mesa.Model):
-    def __init__(self, config = None):
+    def __init__(self, config=None):
         self.config = config or SimConfig()
-        super().__init__(seed=self.config.seed)
+        super().__init__(rng=self.config.seed)
         self.step_count = 0
 
         self.environment = Environment(self, config=self.config.environment)
@@ -19,7 +20,8 @@ class Model(mesa.Model):
 
         self.training_buffer = TrainingBuffer()
 
-        self.deaths_this_step = {DeathCause.AGE: 0, DeathCause.FITNESS: 0, DeathCause.THRESHOLD: 0, DeathCause.COMPETITION: 0}
+        self.deaths_this_step = {DeathCause.AGE: 0, DeathCause.FITNESS: 0, DeathCause.THRESHOLD: 0,
+                                 DeathCause.COMPETITION: 0}
         self.births_this_step = 0
         self.datacollector = mesa.DataCollector(
             model_reporters={
@@ -59,6 +61,8 @@ class Model(mesa.Model):
 
     def run(self, n_steps: int = 100):
         for _ in range(n_steps):
+            self.step()
+
             if len(self.agents) == 0:
                 print(f"Population extinct at step {self.step_count}")
                 break
@@ -108,14 +112,7 @@ class Model(mesa.Model):
                 for a in self.agents if a.is_alive and a.fitness is not None
             ])))
 
-            print("AvgSize", float(np.mean([
-                a.genes_map["size"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
-
             print("Females", len([s for s in self.agents if s.gender == Gender.FEMALE]), "\n")
-
-            self.step()
 
             if _ > 0:
                 self.training_buffer.save(self.config.output_path)
