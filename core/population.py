@@ -11,70 +11,109 @@ from .individual import Individual
 
 
 class Population:
+    """Manages the population of individuals and evolutionary dynamics."""
+
     def __init__(self, model: Model, config: PopulationConfig | None = None):
+        """
+        Initialize population manager.
+
+        Args:
+            model: Reference to the simulation model.
+            config: Population configuration. Defaults are used if None.
+
+        Initializes:
+            - Initial population size
+            - Generation counter
+        """
+
         self.model = model
         self.config = config or PopulationConfig()
         self.initial_size = self.config.initial_size
         self.generation = 0
 
     def initialize(self):
+        """
+        Create the initial population.
+
+        Generates individuals with random genomes.
+        """
+
         for _ in range(self.initial_size):
             ind = Individual.random_init(self.model, self.config.genome_labels)
             self.model.agents.add(ind)
 
     @property
     def count_females(self) -> int:
+        """Return number of female individuals in the population."""
         return len([a for a in self.model.agents if a.gender == Gender.FEMALE])
 
     @property
     def count_males(self) -> int:
+        """Return number of male individuals in the population."""
         return len([a for a in self.model.agents if a.gender == Gender.MALE])
 
     @property
     def actual_pop_size(self) -> int:
+        """Return number of alive individuals."""
         return len([a for a in self.model.agents if a.is_alive])
 
     @property
     def avg_fitness(self) -> np.floating:
+        """Compute average fitness of alive individuals."""
         return np.mean([a.fitness for a in self.model.agents if a.fitness is not None and a.is_alive] or [0])
 
     @property
     def avg_age(self) -> np.floating:
+        """Compute average age of alive individuals."""
         return np.mean([a.age for a in self.model.agents if a.is_alive])
 
     @property
     def avg_satiation(self) -> np.floating:
+        """Compute average satiation of alive individuals."""
         return np.mean([a.satiation for a in self.model.agents if a.is_alive])
 
     @property
     def avg_heat_resistance(self) -> np.floating:
+        """Compute average heat resistance trait."""
         return np.mean([a["heat_resistance"] for a in self.model.agents if a.is_alive])
 
     @property
     def avg_cold_resistance(self) -> np.floating:
+        """Compute average cold resistance trait."""
         return np.mean([a["cold_resistance"] for a in self.model.agents if a.is_alive])
 
     @property
     def avg_metabolic_rate(self) -> np.floating:
+        """Compute average metabolic rate trait."""
         return np.mean([a["metabolic_rate"] for a in self.model.agents if a.is_alive])
 
     @property
     def avg_resilience(self) -> np.floating:
+        """Compute average resilience trait."""
         return np.mean([a["resilience"] for a in self.model.agents if a.is_alive])
 
     @property
     def avg_size(self) -> np.floating:
+        """Compute average size trait."""
         return np.mean([a["size"] for a in self.model.agents if a.is_alive])
 
     @property
     def avg_speed(self) -> np.floating:
+        """Compute average speed trait."""
         return np.mean([a["speed"] for a in self.model.agents if a.is_alive])
 
     @property
     def avg_aggressiveness(self) -> np.floating:
+        """Compute average aggressiveness trait."""
         return np.mean([a["aggressiveness"] for a in self.model.agents if a.is_alive])
 
     def remove_dead(self):
+        """
+        Remove dead individuals from the simulation.
+
+        Also updates death statistics grouped by cause.
+        """
+
         dead = list(self.model.agents.select(lambda a: not a.is_alive))
         self.model.deaths_this_step = {
             DeathCause.AGE: sum(1 for a in dead if a.death_cause == DeathCause.AGE),
@@ -85,13 +124,31 @@ class Population:
         for agent in dead:
             agent.remove()
 
-    def _death_prob(self, loser: Individual, pover_dif: float):
-        death_prob = self.config.wound_base * abs(pover_dif) * (1.0 - loser["resilience"]) * loser["aggressiveness"]
+    def _death_prob(self, loser: Individual, power_diff: float):
+        """
+        Determine an individual death probability after competition.
+
+        Args:
+            loser: Individual that lost the competition.
+            power_diff: Relative difference in strength between agents.
+        """
+
+        death_prob = self.config.wound_base * abs(power_diff) * (1.0 - loser["resilience"]) * loser["aggressiveness"]
         if self.model.rng.random() < death_prob:
             loser.is_alive = False
             loser.death_cause = DeathCause.COMPETITION
 
     def compete(self, hungry: list[Individual], fed: list[Individual]):
+        """
+        Handle competition for food between agents.
+
+        Hungry agents try to steal food from fed agents.
+
+        Args:
+            hungry: Agents that did not receive enough food.
+            fed: Agents that successfully obtained food.
+        """
+
         for attacker in hungry:
             if not fed:
                 break
@@ -119,6 +176,17 @@ class Population:
 
     def record_birth(self, child_id: int, p1: Individual, p2: Individual, pre_mutation_genome: np.ndarray,
                      mutation_deltas: np.ndarray):
+        """
+        Record data about a newly created individual.
+
+        Args:
+            child_id: Unique ID of the child.
+            p1: First parent.
+            p2: Second parent.
+            pre_mutation_genome: Genome before mutation.
+            mutation_deltas: Changes applied during mutation.
+        """
+
         alive = [a for a in self.model.agents if a.is_alive and a.fitness is not None]
 
         self.model.training_buffer.record_birth(
@@ -138,6 +206,16 @@ class Population:
         )
 
     def reproduce(self):
+        """
+        Generate offspring using sexual reproduction.
+
+        Process:
+            - Select males and females
+            - Choose parents based on fitness ranking
+            - Perform crossover and mutation
+            - Create new individuals
+        """
+
         females = list(a for a in self.model.agents if
                        a.fitness is not None and a.gender == Gender.FEMALE and a.age >= self.config.min_reproduction_age)
 
@@ -182,6 +260,8 @@ class Population:
                 self.record_birth(child.unique_id, p1, p2, pre_mutation_genome, mutation_deltas)
 
     def step(self):
+        """Advance population state by one step."""
+
         self.model.agents.shuffle_do("step")
         self.remove_dead()
         self.generation += 1

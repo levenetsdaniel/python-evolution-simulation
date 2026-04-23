@@ -7,8 +7,34 @@ from .fitness import fitness
 
 
 class Individual(mesa.Agent):
+    """
+    Represents a single agent (organism) in the evolutionary simulation.
+
+    Each individual is defined by a genome — a vector of continuous traits,
+    which determine its survival and reproduction capabilities.
+    """
+
     def __init__(self, model: mesa.Model, genome: np.ndarray, genome_labels: list[str], parent_ids: tuple | None,
                  generation: int = 0, age: int = 0):
+        """
+        Initialize an individual agent.
+
+        Args:
+            model: Reference to the simulation model.
+            genome: Array of gene values (0–1 range).
+            genome_labels: Names corresponding to genome entries.
+            parent_ids: Tuple of parent IDs, or None if randomly initialized.
+            generation: Generation index of the individual.
+            age: Initial age.
+
+        Initializes:
+            - genes_map: Mapping from gene names to values
+            - gender: Randomly assigned biological sex
+            - food_need: Computed from genome traits
+            - fitness: Initially None
+            - is_alive: Alive state flag
+        """
+
         super().__init__(model)
         self.config = IndividualConfig()
         self.genome = np.array(genome, dtype=float)
@@ -29,22 +55,48 @@ class Individual(mesa.Agent):
         self.is_alive = True
 
     def __getitem__(self, item: str) -> float:
+        """
+        Access gene value by name.
+
+        Args:
+            item: Gene label.
+
+        Returns:
+            Value of the corresponding gene.
+        """
+
         return self.genes_map[item]
 
     @property
-    def n_genes(self) -> int:
-        return len(self.genome)
-
-    @property
     def satiation(self) -> float:
+        """
+        Compute current satiation level.
+
+        Returns:
+        Ratio of consumed food to required food.
+        """
+
         return self.food_eaten / self.food_need
 
     def compute_fitness(self) -> float:
+        """
+        Compute fitness score for the individual.
+
+        Returns:
+            Fitness score in range [score_floor, 1.0].
+        """
+
         ind_params = self.genes_map.copy()
         ind_params["satiation"] = self.satiation
         return fitness(ind_params, self.model.environment.current_params)
 
     def step(self):
+        """
+        Advance the individual by one simulation step.
+
+        Checks if the agent is dead.
+        """
+
         self.fitness = self.compute_fitness()
         self.model.training_buffer.record_fitness(self.unique_id, self.fitness)
         if self.fitness < self.config.fitness_death_threshold:
@@ -63,8 +115,23 @@ class Individual(mesa.Agent):
             return
 
     @classmethod
-    def random_init(cls, model: mesa.Model, genome_labels: list[str], generation: int = 0, age: int = 2):
+    def random_init(cls, model: mesa.Model, genome_labels: list[str], generation: int = 0,
+                    age: int = 2) -> "Individual":
+        """
+        Create a randomly initialized individual.
+
+        Args:
+            model: Simulation model.
+            genome_labels: Names of genome traits.
+            generation: Initial generation.
+            age: Initial age.
+
+        Returns:
+            New randomly initialized Individual.
+        """
+
         genome = model.rng.random(len(genome_labels))
+
         return cls(
             model=model,
             genome=genome,
@@ -76,7 +143,21 @@ class Individual(mesa.Agent):
 
     @classmethod
     def from_parents(cls, model: mesa.Model, p1: "Individual", p2: "Individual", genome: np.ndarray,
-                     generation: int = 0):
+                     generation: int = 0) -> "Individual":
+        """
+        Create an individual from two parents.
+
+        Args:
+            model: Simulation model.
+            p1: First parent.
+            p2: Second parent.
+            genome: Resulting genome after recombination and mutation.
+            generation: Generation index.
+
+        Returns:
+            New Individual with inherited parent IDs.
+        """
+
         return cls(
             model=model,
             genome=genome,

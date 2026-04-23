@@ -1,10 +1,6 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from numpy import ndarray
-
-import mesa  # type: ignore[import-untyped]
+import mesa
 from config.sim_config import SimConfig
 
 from .enums import DeathCause
@@ -14,7 +10,27 @@ from .training_buffer import TrainingBuffer
 
 
 class Model(mesa.Model):
-    def __init__(self, config=None):
+    """
+    Main simulation model coordinating environment, population, and data collection.
+
+    The model executes a step-based simulation loop and tracks key statistics.
+    """
+
+    def __init__(self, config: SimConfig | None = None):
+        """
+        Initialize the simulation model.
+
+        Args:
+            config: Simulation configuration. If None, default SimConfig is used.
+
+        Initializes:
+            - Random number generator
+            - Environment and population subsystems
+            - Training buffer for data collection
+            - Counters for births and deaths
+            - DataCollector for tracking simulation metrics
+        """
+
         self.config = config or SimConfig()
         super().__init__(rng=self.config.seed)
         self.step_count = 0
@@ -55,6 +71,8 @@ class Model(mesa.Model):
         self.population.initialize()
 
     def step(self):
+        """Advance the simulation by one time step."""
+
         self.births_this_step = 0
         for key in self.deaths_this_step:
             self.deaths_this_step[key] = 0
@@ -65,6 +83,17 @@ class Model(mesa.Model):
         self.datacollector.collect(self)
 
     def run(self, n_steps: int = 100):
+        """
+        Run the simulation for a given number of steps.
+
+        The simulation stops early if extinction conditions are met:
+            - No agents remain
+            - Only one gender remains (no reproduction possible)
+
+        Args:
+            n_steps: Maximum number of steps to simulate.
+        """
+
         for _ in range(n_steps):
             self.step()
 

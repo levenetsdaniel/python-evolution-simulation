@@ -24,7 +24,7 @@ evosim/
 │   ├── individual.py      # модель особи, вектор признаков
 │   ├── population.py      # Mesa-модель популяции
 │   ├── environment.py     # Environment, fitness_score(), сценарии изменения
-│   └── simulation.py      # SimulationEngine, запуск двух параллельных ветвей
+│   └── model.py           # SimulationEngine, запуск двух параллельных ветвей
 ├── neural/
 │   ├── advisor.py         # PyTorch: предсказание оптимальных признаков
 │   └── trainer.py         # обучение на истории baseline
@@ -69,3 +69,120 @@ evosim/
 - **2.6** Итоговая таблица baseline vs neural — численность, средний fitness, скорость адаптации, число вымираний. 
 
 ---
+
+## Сборка
+
+### Установка
+
+```bash
+git clone https://github.com/levenetsdaniel/python-evolution-simulation
+cd evosim
+
+# виртуальное окружение
+python -m venv .venv
+source .venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+### Структура запуска
+
+```bash
+python main.py [опции]
+```
+
+---
+
+## CLI
+
+Все параметры опциональны — по умолчанию используются значения из `config/sim_config.py`.
+
+### Симуляция
+
+| Флаг | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `--n-steps` | int | `600` | Число шагов симуляции |
+| `--seed` | int | `42` | Сид генератора случайных чисел |
+| `--output` | str | `data/training_samples.json` | Путь для сохранения собранных обучающих примеров (активно при `--record`) |
+| `--record` | flag | off | Записывать буфер обучающих примеров на диск |
+| `--debug` | flag | off | Печатать подробную статистику по каждому шагу |
+
+### Вывод статистики
+
+| Флаг | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `--model-info` | flag | off | Вывести сводку по модели |
+| `--steps-info` | int | `5` | Сколько последних шагов показать для `--model-info` |
+| `--population-info` | flag | off | Вывести метрики популяции |
+| `--individual-info` | flag | off | Вывести метрики агентов |
+
+### Среда (`EnvironmentConfig`)
+
+| Флаг | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `--food-availability` | float | `10000.0` | Пищевой ресурс на шаг |
+| `--max-temp` | float | `50.0` | Верхняя граница температуры (°C) |
+| `--min-temp` | float | `-30.0` | Нижняя граница температуры (°C) |
+
+### Популяция (`PopulationConfig`)
+
+| Флаг | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `--population-size` | int | `100` | Начальный размер популяции |
+| `--mutation-std` | float | `0.12` | Стандартное отклонение мутации |
+| `--reproduction-rate` | float | `0.4` | Коэффициент плодовитости |
+| `--min-reproduction-age` | int | `2` | Минимальный возраст для размножения |
+| `--wound-base` | float | `0.4` | Базовая вероятность смерти проигравшего в конкуренции |
+
+### Агент (`IndividualConfig`)
+
+| Флаг | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `--fitness-death-threshold` | float | `0.1` | Порог fitness, ниже которого особь гибнет мгновенно |
+| `--fitness-death-prob-coef` | float | `0.1` | Множитель вероятности смерти от низкого fitness |
+| `--age-scale` | float | `80.0` | Масштаб возрастной смертности (выше — дольше живут) |
+| `--age-death-power` | float | `1.2` | Показатель степени в возрастной функции смертности |
+| `--food-need-size-coef` | float | `5.0` | Вклад признака `size` в потребность в пище |
+| `--food-need-resilience-coef` | float | `2.0` | Вклад признака `resilience` в потребность в пище |
+| `--food-need-speed-coef` | float | `1.0` | Вклад признака `speed` в потребность в пище |
+| `--food-need-aggr-coef` | float | `10.0` | Вклад признака `aggressiveness` в потребность в пище |
+
+### Справка
+
+```bash
+python main.py --help
+```
+
+---
+
+## Примеры
+
+Быстрый прогон на 200 шагов с выводом метрик модели:
+
+```bash
+python main.py --n-steps 200 --model-info
+```
+
+Большая популяция, усиленные мутации, фиксированный сид для воспроизводимости:
+
+```bash
+python main.py --population-size 500 --mutation-std 0.2 --seed 7
+```
+
+Сбор обучающей выборки для нейросоветчика:
+
+```bash
+python main.py --n-steps 1000 --record --output data/run_01.json
+```
+
+Жёсткий температурный режим (арктический сценарий):
+
+```bash
+python main.py --min-temp -50 --max-temp 10 --food-availability 5000
+```
+
+Полный дебаг-прогон с пошаговыми логами:
+
+```bash
+python main.py --n-steps 50 --debug --population-info --individual-info
+```

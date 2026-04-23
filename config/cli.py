@@ -8,6 +8,13 @@ sim = SimConfig()
 
 
 def parse_args() -> SimConfig:
+    """
+    Parse CLI arguments into a simulation configuration.
+
+    Returns:
+        Fully constructed simulation configuration.
+    """
+
     parser = argparse.ArgumentParser(description="EvoSim — evolutionary simulation")
 
     parser.add_argument("--fitness-death-threshold", type=float, default=ind.fitness_death_threshold)

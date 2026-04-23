@@ -9,7 +9,28 @@ from config.sim_config import EnvironmentConfig
 
 
 class Environment:
+    """
+    Represents the environment in which the population evolves.
+
+    The environment maintains dynamic parameters such as temperature,
+    food availability, and hazard level. These parameters evolve over time
+    and directly influence agent survival, fitness, and interactions.
+    """
+
     def __init__(self, model: Model, config: EnvironmentConfig | None = None):
+        """
+        Initialize the environment with initial parameters.
+
+        Args:
+            model: Reference to the parent simulation model.
+            config: Environment configuration. If None, defaults are used.
+
+        Initializes:
+            time: Current simulation time.
+            current_params: Active environmental parameters.
+            prev_params: Parameters from the previous step (used for deltas).
+        """
+
         self.model = model
         self.config = config or EnvironmentConfig()
 
@@ -23,6 +44,16 @@ class Environment:
         self.prev_params = self.current_params.copy()
 
     def food_distribution(self):
+        """
+        Distribute available food among alive agents.
+
+        Agents are processed in weighted random order.
+
+        Agents with enough available food are fully fed.
+        Remaining agents become "hungry".
+        Hungry agents may compete with fed agents for resources.
+        """
+
         alive = [a for a in self.model.agents if a.is_alive]
 
         raw_weight = np.array([a.genes_map["speed"] * 2.0 / a.food_need for a in alive])
@@ -46,6 +77,14 @@ class Environment:
             self.model.population.compete(hungry, fed)
 
     def step(self):
+        """
+        Advance the environment by one step.
+
+        Updates environmental parameters according to configuration:
+
+        Triggers food distribution among agents.
+        """
+
         self.prev_params = self.current_params.copy()
         self.time += 1
 

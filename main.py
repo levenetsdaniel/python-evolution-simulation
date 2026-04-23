@@ -1,3 +1,10 @@
+"""
+Command-line entry point for running the simulation.
+
+Initializes configuration from CLI, runs the model,
+and optionally prints collected statistics.
+"""
+
 from config.cli import parse_args
 from core.model import Model
 
@@ -15,7 +22,6 @@ if __name__ == "__main__":
     if config.population_info:
         print("Population stats:")
         print(model_df.describe())
-
 
     agent_df = model.datacollector.get_agent_vars_dataframe()
     if config.individual_info:

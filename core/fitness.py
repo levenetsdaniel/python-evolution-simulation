@@ -6,6 +6,19 @@ env_config = EnvironmentConfig()
 
 
 def _temp_score(heat_res: float, cold_res: float, temp: float, optimum: float) -> float:
+    """
+    Calculates the temperature score given an agent's heat resistance, cold resistance and environment's current temperature.
+
+    Args:
+        heat_res: Individual resistance to high temperatures.
+        cold_res: Individual resistance to low temperatures.
+        temp: Current environmental temperature.
+        optimum: Target (optimal) normalized temperature for fitness peak.
+
+    Returns:
+        A value in the range [score_floor, 1.0] representing temperature fitness.
+    """
+
     temp_norm = (temp - env_config.min_temperature) / (env_config.max_temperature - env_config.min_temperature)
     delta = temp_norm - config.temp_20_norm
     temp_intensity = abs(delta / config.temp_20_norm)
@@ -20,6 +33,17 @@ def _temp_score(heat_res: float, cold_res: float, temp: float, optimum: float) -
 
 
 def _hazard_score(resilience: float, hazard: float) -> float:
+    """
+    Calculates the hazard score given an agent's resilience and environment's hazard level
+
+    Args:
+        resilience: Individual resilience trait.
+        hazard: Current environmental hazard level.
+
+    Returns:
+        A value in the range [score_floor, 1.0] representing hazard fitness.
+    """
+
     fragility = hazard * (1.0 - resilience)
     hazard_score = np.exp(-fragility ** 2)
 
@@ -27,6 +51,19 @@ def _hazard_score(resilience: float, hazard: float) -> float:
 
 
 def _energy_score(satiation: float, resilience: float, metabolic_rate: float, aggressiveness: float) -> float:
+    """
+    Calculates the energy score given an agent's satiation, resilience, aggressiveness and metabolic rate.
+
+    Args:
+        satiation: Ratio of consumed food to required food.
+        resilience: Individual resilience trait.
+        metabolic_rate: Energy consumption rate.
+        aggressiveness: Individual aggression level.
+
+    Returns:
+        A value in the range [score_floor, 1.0] representing energy fitness.
+    """
+
     efficiency = 1.0 - metabolic_rate * config.metabolic_rate_efficiency_penalty - resilience * config.resilience_efficiency_penalty
 
     aggression_excess = max(0.0, aggressiveness - metabolic_rate)
@@ -38,6 +75,23 @@ def _energy_score(satiation: float, resilience: float, metabolic_rate: float, ag
 
 
 def fitness(ind_params: dict[str, float], env_params: dict[str, float]) -> float:
+    """
+    Calculates the fitness given an individual's and environment's parameters
+
+    Fitness is calculated as a multiplicative product of three independent components:
+
+        - Temperature adaptation (_temp_score)
+        - Energy efficiency (_energy_score)
+        - Hazard resistance (_hazard_score)
+
+    Args:
+        ind_params: Dictionary of individual traits.
+        env_params: Dictionary of environmental parameters.
+
+    Returns:
+        A scalar fitness score in the range [score_floor, 1.0].
+    """
+
     temp_score = _temp_score(ind_params["heat_resistance"], ind_params["cold_resistance"], env_params["temperature"],
                              env_params["optimum_temperature"])
 

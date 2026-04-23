@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 
 @dataclass
 class EnvironmentConfig:
+    """Parameters controlling the environment."""
+
     food_availability: float = 10000.0
     temp_start: float = 20.0
     temp_step: float = 0.05
@@ -18,6 +20,8 @@ class EnvironmentConfig:
 
 @dataclass
 class PopulationConfig:
+    """Parameters controlling population size, reproduction, and genetics."""
+
     genome_labels: list[str] = field(
         default_factory=lambda: ["heat_resistance", "cold_resistance", "metabolic_rate", "resilience", "size", "speed",
                                  "aggressiveness"])
@@ -30,6 +34,8 @@ class PopulationConfig:
 
 @dataclass
 class IndividualConfig:
+    """Parameters controlling individual agent behaviour and survival."""
+
     fitness_death_threshold: float = 0.1
     fitness_death_prob_coef: float = 0.1
     age_scale: float = 80.0
@@ -42,6 +48,8 @@ class IndividualConfig:
 
 @dataclass
 class FitnessConfig:
+    """Parameters controlling the fitness scoring functions."""
+
     temp_20_norm: float = 0.625
     temp_score_sharpness: float = 0.5
     metabolic_rate_efficiency_penalty: float = 0.5
@@ -52,6 +60,8 @@ class FitnessConfig:
 
 @dataclass
 class SimConfig:
+    """Simulation configuration. Aggregates all sub-configs."""
+
     environment: EnvironmentConfig = field(default_factory=EnvironmentConfig)
     population: PopulationConfig = field(default_factory=PopulationConfig)
     individual: IndividualConfig = field(default_factory=IndividualConfig)
