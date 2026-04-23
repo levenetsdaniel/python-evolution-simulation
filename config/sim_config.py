@@ -58,6 +58,9 @@ class SimConfig:
     n_steps: int = 600
     seed: int = 42
     output_path: str = "data/training_samples.json"
-    steps_info: int = 0
+    steps_info: int = 5
+    model_info: bool = False
     population_info: bool = False
     individual_info: bool = False
+    record: bool = False
+    debug: bool = False

@@ -1,8 +1,13 @@
-import mesa
-import numpy as np
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from numpy import ndarray
+
+import mesa  # type: ignore[import-untyped]
 from config.sim_config import SimConfig
 
-from .enums import DeathCause, Gender
+from .enums import DeathCause
 from .environment import Environment
 from .population import Population
 from .training_buffer import TrainingBuffer
@@ -27,7 +32,7 @@ class Model(mesa.Model):
             model_reporters={
                 "Step": "step_count",
                 "Generation": lambda m: m.population.generation,
-                "PopulationSize": lambda m: m.population.actual_size,
+                "PopulationSize": lambda m: m.population.actual_pop_size,
 
                 "AvgFitness": lambda m: m.population.avg_fitness,
                 "AvgAge": lambda m: m.population.avg_age,
@@ -75,46 +80,37 @@ class Model(mesa.Model):
                 print(f"Population extinct at step {self.step_count}, all females died")
                 break
 
-            print("step", _)
-            print("AvgFitness", float(self.datacollector.model_reporters["AvgFitness"](self)))
+            if self.config.debug:
+                print("step", _)
 
-            print("FoodCount", float(self.environment.current_params["food_availability"]))
+                print("AvgFitness", float(self.datacollector.model_reporters["AvgFitness"](self)))
 
-            print("Temperature", float(self.environment.current_params["temperature"]))
+                print("FoodCount", float(self.environment.current_params["food_availability"]))
 
-            print("AvgHeatResistance", float(np.mean([
-                a.genes_map["heat_resistance"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("Temperature", float(self.environment.current_params["temperature"]))
 
-            print("AvgColdResistance", float(np.mean([
-                a.genes_map["cold_resistance"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("AvgHeatResistance", self.population.avg_heat_resistance)
 
-            print("AvgSize", float(np.mean([
-                a.genes_map["size"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("AvgColdResistance", self.population.avg_cold_resistance)
 
-            print("AvgSpeed", float(np.mean([
-                a.genes_map["speed"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("AvgSize", self.population.avg_size)
 
-            print("AvgResilience", float(np.mean([
-                a.genes_map["resilience"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("AvgSpeed", self.population.avg_speed)
 
-            print("AvgAggressivness", float(np.mean([
-                a.genes_map["aggressiveness"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("AvgResilience", self.population.avg_resilience)
 
-            print("Females", len([s for s in self.agents if s.gender == Gender.FEMALE]), "\n")
+                print("AvgAggressivness", self.population.avg_aggressiveness)
 
-            if _ > 0:
+                print("Females", self.population.count_females)
+
+                print("Males", self.population.count_males, "\n")
+
+            if self.config.record:
                 self.training_buffer.save(self.config.output_path)
-                x, y, weights = self.training_buffer.to_numpy()
-                print(f"Training data: x={x.shape}, y={y.shape}")
+                try:
+                    x, y, weights = self.training_buffer.to_numpy()
+                except ValueError:
+                    x = y = weights = None
+
+                if self.config.debug and x is not None and y is not None:
+                    print(f"Training data: x={x.shape}, y={y.shape}")

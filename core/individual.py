@@ -5,8 +5,6 @@ from config.sim_config import IndividualConfig
 from .enums import Gender, DeathCause
 from .fitness import fitness
 
-rng = np.random.default_rng()
-
 
 class Individual(mesa.Agent):
     def __init__(self, model: mesa.Model, genome: np.ndarray, genome_labels: list[str], parent_ids: tuple | None,
@@ -30,7 +28,7 @@ class Individual(mesa.Agent):
         self.fitness = None
         self.is_alive = True
 
-    def __getitem__(self, item: str):
+    def __getitem__(self, item: str) -> float:
         return self.genes_map[item]
 
     @property
@@ -59,7 +57,7 @@ class Individual(mesa.Agent):
         fitness_death_prob = (1 - self.fitness) * self.config.fitness_death_prob_coef
         death_prob = 1 - (1 - age_death_prob) * (1 - fitness_death_prob)
 
-        if rng.random() < death_prob:
+        if self.model.rng.random() < death_prob:
             self.is_alive = False
             self.death_cause = DeathCause.FITNESS if fitness_death_prob > age_death_prob else DeathCause.AGE
             return

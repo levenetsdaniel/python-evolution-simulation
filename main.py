@@ -8,9 +8,9 @@ if __name__ == "__main__":
 
     model_df = model.datacollector.get_model_vars_dataframe()
 
-    if config.steps_info:
+    if config.model_info:
         print("Model stats:")
-        print(model_df.tail(config.population_info))
+        print(model_df.tail(config.steps_info))
 
     if config.population_info:
         print("Population stats:")

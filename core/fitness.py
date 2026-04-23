@@ -37,7 +37,7 @@ def _energy_score(satiation: float, resilience: float, metabolic_rate: float, ag
     return np.clip(energy_score, config.score_floor, 1.0)
 
 
-def fitness(ind_params: dict, env_params: dict):
+def fitness(ind_params: dict[str, float], env_params: dict[str, float]) -> float:
     temp_score = _temp_score(ind_params["heat_resistance"], ind_params["cold_resistance"], env_params["temperature"],
                              env_params["optimum_temperature"])
 

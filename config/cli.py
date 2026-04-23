@@ -11,7 +11,7 @@ def parse_args() -> SimConfig:
     parser = argparse.ArgumentParser(description="EvoSim — evolutionary simulation")
 
     parser.add_argument("--fitness-death-threshold", type=float, default=ind.fitness_death_threshold)
-    parser.add_argument("--fitness-death-prob_coef", type=float, default=ind.fitness_death_prob_coef)
+    parser.add_argument("--fitness-death-prob-coef", type=float, default=ind.fitness_death_prob_coef)
     parser.add_argument("--age-scale", type=float, default=ind.age_scale)
     parser.add_argument("--age-death-power", type=float, default=ind.age_death_power)
     parser.add_argument("--food-need-size-coef", type=float, default=ind.food_need_size_coef)
@@ -22,7 +22,7 @@ def parse_args() -> SimConfig:
     parser.add_argument("--population-size", type=int, default=pop.initial_size)
     parser.add_argument("--mutation-std", type=float, default=pop.mutation_std)
     parser.add_argument("--reproduction-rate", type=float, default=pop.reproduction_rate)
-    parser.add_argument("--min-reproduction_age", type=int, default=pop.min_reproduction_age)
+    parser.add_argument("--min-reproduction-age", type=int, default=pop.min_reproduction_age)
     parser.add_argument("--wound-base", type=float, default=pop.wound_base)
 
     parser.add_argument("--food-availability", type=float, default=env.food_availability)
@@ -32,9 +32,12 @@ def parse_args() -> SimConfig:
     parser.add_argument("--n-steps", type=int, default=sim.n_steps)
     parser.add_argument("--seed", type=int, default=sim.seed)
     parser.add_argument("--output", type=str, default=sim.output_path)
-    parser.add_argument("--steps_info", type=int, default=sim.steps_info)
-    parser.add_argument("--population-info", type=bool, default=sim.population_info)
-    parser.add_argument("--individual-info", type=bool, default=sim.individual_info)
+    parser.add_argument("--steps-info", type=int, default=sim.steps_info)
+    parser.add_argument("--model-info", action="store_true", default=sim.model_info)
+    parser.add_argument("--population-info", action="store_true", default=sim.population_info)
+    parser.add_argument("--individual-info", action="store_true", default=sim.individual_info)
+    parser.add_argument("--record", action="store_true", default=sim.record)
+    parser.add_argument("--debug", action="store_true", default=sim.debug)
 
     args = parser.parse_args()
 
@@ -68,6 +71,9 @@ def parse_args() -> SimConfig:
         seed=args.seed,
         output_path=args.output,
         steps_info=args.steps_info,
+        model_info=args.model_info,
         population_info=args.population_info,
         individual_info=args.individual_info,
+        record=args.record,
+        debug=args.debug
     )

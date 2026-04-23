@@ -1,3 +1,9 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .model import Model
+
 import numpy as np
 from config.sim_config import PopulationConfig
 from .enums import DeathCause, Gender
@@ -5,7 +11,7 @@ from .individual import Individual
 
 
 class Population:
-    def __init__(self, model, config: PopulationConfig = None):
+    def __init__(self, model: Model, config: PopulationConfig | None = None):
         self.model = model
         self.config = config or PopulationConfig()
         self.initial_size = self.config.initial_size
@@ -25,7 +31,7 @@ class Population:
         return len([a for a in self.model.agents if a.gender == Gender.MALE])
 
     @property
-    def actual_size(self) -> int:
+    def actual_pop_size(self) -> int:
         return len([a for a in self.model.agents if a.is_alive])
 
     @property
@@ -40,6 +46,34 @@ class Population:
     def avg_satiation(self) -> np.floating:
         return np.mean([a.satiation for a in self.model.agents if a.is_alive])
 
+    @property
+    def avg_heat_resistance(self) -> np.floating:
+        return np.mean([a["heat_resistance"] for a in self.model.agents if a.is_alive])
+
+    @property
+    def avg_cold_resistance(self) -> np.floating:
+        return np.mean([a["cold_resistance"] for a in self.model.agents if a.is_alive])
+
+    @property
+    def avg_metabolic_rate(self) -> np.floating:
+        return np.mean([a["metabolic_rate"] for a in self.model.agents if a.is_alive])
+
+    @property
+    def avg_resilience(self) -> np.floating:
+        return np.mean([a["resilience"] for a in self.model.agents if a.is_alive])
+
+    @property
+    def avg_size(self) -> np.floating:
+        return np.mean([a["size"] for a in self.model.agents if a.is_alive])
+
+    @property
+    def avg_speed(self) -> np.floating:
+        return np.mean([a["speed"] for a in self.model.agents if a.is_alive])
+
+    @property
+    def avg_aggressiveness(self) -> np.floating:
+        return np.mean([a["aggressiveness"] for a in self.model.agents if a.is_alive])
+
     def remove_dead(self):
         dead = list(self.model.agents.select(lambda a: not a.is_alive))
         self.model.deaths_this_step = {
@@ -51,13 +85,13 @@ class Population:
         for agent in dead:
             agent.remove()
 
-    def _death_prob(self, loser, pover_dif):
+    def _death_prob(self, loser: Individual, pover_dif: float):
         death_prob = self.config.wound_base * abs(pover_dif) * (1.0 - loser["resilience"]) * loser["aggressiveness"]
         if self.model.rng.random() < death_prob:
             loser.is_alive = False
             loser.death_cause = DeathCause.COMPETITION
 
-    def compete(self, hungry: list, fed: list):
+    def compete(self, hungry: list[Individual], fed: list[Individual]):
         for attacker in hungry:
             if not fed:
                 break
@@ -86,6 +120,7 @@ class Population:
     def record_birth(self, child_id: int, p1: Individual, p2: Individual, pre_mutation_genome: np.ndarray,
                      mutation_deltas: np.ndarray):
         alive = [a for a in self.model.agents if a.is_alive and a.fitness is not None]
+
         self.model.training_buffer.record_birth(
             child_id=child_id,
             pre_mutation_genome=pre_mutation_genome,
@@ -99,7 +134,7 @@ class Population:
                 for k, v in self.model.environment.current_params.items()
             },
             pop_mean_genome=np.mean([a.genome for a in alive], axis=0),
-            pop_mean_fitness=self.avg_fitness,
+            pop_mean_fitness=float(self.avg_fitness),
         )
 
     def reproduce(self):

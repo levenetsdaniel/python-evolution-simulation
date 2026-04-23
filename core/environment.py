@@ -1,9 +1,15 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .model import Model
+
 import numpy as np
 from config.sim_config import EnvironmentConfig
 
 
 class Environment:
-    def __init__(self, model, config=None):
+    def __init__(self, model: Model, config: EnvironmentConfig | None = None):
         self.model = model
         self.config = config or EnvironmentConfig()
 

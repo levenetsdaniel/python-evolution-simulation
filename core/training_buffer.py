@@ -22,6 +22,7 @@ class TrainingSample:
 class TrainingBuffer:
     MIN_TEMPERATURE = EnvironmentConfig().min_temperature
     MAX_TEMPERATURE = EnvironmentConfig().max_temperature
+    MAX_FOOD = EnvironmentConfig().food_availability
 
     def __init__(self):
         self.samples: list[TrainingSample] = []
@@ -40,16 +41,17 @@ class TrainingBuffer:
             pop_mean_fitness: float,
     ):
         temp_norm = (env_params["temperature"] - self.MIN_TEMPERATURE) / (self.MAX_TEMPERATURE - self.MIN_TEMPERATURE)
+        food_norm = env_params["food_availability"] / self.MAX_FOOD
         env_vec = [
             temp_norm,
-            env_params["food_availability"],
+            food_norm,
             env_params["hazard_level"]
         ]
 
         delta_temp_norm = env_delta.get("temperature", 0.0) / (self.MAX_TEMPERATURE - self.MIN_TEMPERATURE)
         env_delta_vec = [
             delta_temp_norm,
-            env_delta.get("food_availability", 0.0),
+            env_delta.get("food_availability", 0.0) / self.MAX_FOOD,
             env_delta.get("hazard_level", 0.0)
         ]
 
