@@ -83,11 +83,13 @@ class Model(mesa.Model):
             if self.config.debug:
                 print("step", _)
 
-                print("AvgFitness", float(self.datacollector.model_reporters["AvgFitness"](self)))
+                print("Temperature", float(self.environment.current_params["temperature"]))
+
+                print("HazardLevel", float(self.environment.current_params["hazard_level"]))
 
                 print("FoodCount", float(self.environment.current_params["food_availability"]))
 
-                print("Temperature", float(self.environment.current_params["temperature"]))
+                print("AvgFitness", float(self.datacollector.model_reporters["AvgFitness"](self)))
 
                 print("AvgHeatResistance", self.population.avg_heat_resistance)
 
