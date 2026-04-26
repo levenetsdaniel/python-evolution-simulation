@@ -1,39 +1,54 @@
-import mesa
-import numpy as np
-from dataclasses import dataclass
+from __future__ import annotations
 
-from .enums import DeathCause, Gender
+import mesa
+from config.sim_config import SimConfig
+
+from .enums import DeathCause
 from .environment import Environment
 from .population import Population
 from .training_buffer import TrainingBuffer
 
 
-@dataclass
-class ModelConfig:
-    n_individuals: int = 100
-    n_genes: int = 5
-    initial_temp: float = 20.0
-
-
 class Model(mesa.Model):
-    def __init__(self, config: ModelConfig = None):
-        super().__init__(seed=42)
-        self.config = config or ModelConfig()
+    """
+    Main simulation model coordinating environment, population, and data collection.
+
+    The model executes a step-based simulation loop and tracks key statistics.
+    """
+
+    def __init__(self, config: SimConfig | None = None):
+        """
+        Initialize the simulation model.
+
+        Args:
+            config: Simulation configuration. If None, default SimConfig is used.
+
+        Initializes:
+            - Random number generator
+            - Environment and population subsystems
+            - Training buffer for data collection
+            - Counters for births and deaths
+            - DataCollector for tracking simulation metrics
+        """
+
+        self.config = config or SimConfig()
+        super().__init__(rng=self.config.seed)
         self.step_count = 0
 
-        self.environment = Environment(self)
+        self.environment = Environment(self, config=self.config.environment)
 
-        self.population = Population(self, config.n_individuals)
+        self.population = Population(self, config=self.config.population)
 
         self.training_buffer = TrainingBuffer()
 
-        self.deaths_this_step = {DeathCause.AGE: 0, DeathCause.FITNESS: 0, DeathCause.THRESHOLD: 0, DeathCause.COMPETITION: 0}
+        self.deaths_this_step = {DeathCause.AGE: 0, DeathCause.FITNESS: 0, DeathCause.THRESHOLD: 0,
+                                 DeathCause.COMPETITION: 0}
         self.births_this_step = 0
         self.datacollector = mesa.DataCollector(
             model_reporters={
                 "Step": "step_count",
                 "Generation": lambda m: m.population.generation,
-                "PopulationSize": lambda m: m.population.actual_size,
+                "PopulationSize": lambda m: m.population.actual_pop_size,
 
                 "AvgFitness": lambda m: m.population.avg_fitness,
                 "AvgAge": lambda m: m.population.avg_age,
@@ -56,6 +71,8 @@ class Model(mesa.Model):
         self.population.initialize()
 
     def step(self):
+        """Advance the simulation by one time step."""
+
         self.births_this_step = 0
         for key in self.deaths_this_step:
             self.deaths_this_step[key] = 0
@@ -66,7 +83,20 @@ class Model(mesa.Model):
         self.datacollector.collect(self)
 
     def run(self, n_steps: int = 100):
+        """
+        Run the simulation for a given number of steps.
+
+        The simulation stops early if extinction conditions are met:
+            - No agents remain
+            - Only one gender remains (no reproduction possible)
+
+        Args:
+            n_steps: Maximum number of steps to simulate.
+        """
+
         for _ in range(n_steps):
+            self.step()
+
             if len(self.agents) == 0:
                 print(f"Population extinct at step {self.step_count}")
                 break
@@ -79,53 +109,39 @@ class Model(mesa.Model):
                 print(f"Population extinct at step {self.step_count}, all females died")
                 break
 
-            print("step", _)
-            print("AvgFitness", float(self.datacollector.model_reporters["AvgFitness"](self)))
+            if self.config.debug:
+                print("step", _)
 
-            print("FoodCount", float(self.environment.current_params["food_availability"]))
+                print("Temperature", float(self.environment.current_params["temperature"]))
 
-            print("Temperature", float(self.environment.current_params["temperature"]))
+                print("HazardLevel", float(self.environment.current_params["hazard_level"]))
 
-            print("AvgHeatResistance", float(np.mean([
-                a.genes_map["heat_resistance"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("FoodCount", float(self.environment.current_params["food_availability"]))
 
-            print("AvgColdResistance", float(np.mean([
-                a.genes_map["cold_resistance"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("AvgFitness", float(self.datacollector.model_reporters["AvgFitness"](self)))
 
-            print("AvgSize", float(np.mean([
-                a.genes_map["size"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("AvgHeatResistance", self.population.avg_heat_resistance)
 
-            print("AvgSpeed", float(np.mean([
-                a.genes_map["speed"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("AvgColdResistance", self.population.avg_cold_resistance)
 
-            print("AvgResilience", float(np.mean([
-                a.genes_map["resilience"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("AvgSize", self.population.avg_size)
 
-            print("AvgAggressivness", float(np.mean([
-                a.genes_map["aggressiveness"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("AvgSpeed", self.population.avg_speed)
 
-            print("AvgSize", float(np.mean([
-                a.genes_map["size"]
-                for a in self.agents if a.is_alive and a.fitness is not None
-            ])))
+                print("AvgResilience", self.population.avg_resilience)
 
-            print("Females", len([s for s in self.agents if s.gender == Gender.FEMALE]), "\n")
+                print("AvgAggressivness", self.population.avg_aggressiveness)
 
-            self.step()
+                print("Females", self.population.count_females)
 
-            if _ > 0:
-                self.training_buffer.save("data/training_samples.json")
-                x, y, weights = self.training_buffer.to_numpy()
-                print(f"Training data: x={x.shape}, y={y.shape}")
+                print("Males", self.population.count_males, "\n")
+
+            if self.config.record:
+                self.training_buffer.save(self.config.output_path)
+                try:
+                    x, y, weights = self.training_buffer.to_numpy()
+                except ValueError:
+                    x = y = weights = None
+
+                if self.config.debug and x is not None and y is not None:
+                    print(f"Training data: x={x.shape}, y={y.shape}")
