@@ -1,26 +1,59 @@
-import numpy as np
+from __future__ import annotations
+from typing import TYPE_CHECKING
 
-WOUND_BASE = 0.4
-MAX_FOOD_BASE = 200000
-REGEN_RATE = 5000
-MAX_CAPACITY = 2000
+if TYPE_CHECKING:
+    from .model import Model
+
+import numpy as np
+from config.sim_config import EnvironmentConfig
 
 
 class Environment:
-    def __init__(self, model, config=None):
+    """
+    Represents the environment in which the population evolves.
+
+    The environment maintains dynamic parameters such as temperature,
+    food availability, and hazard level. These parameters evolve over time
+    and directly influence agent survival, fitness, and interactions.
+    """
+
+    def __init__(self, model: Model, config: EnvironmentConfig | None = None):
+        """
+        Initialize the environment with initial parameters.
+
+        Args:
+            model: Reference to the parent simulation model.
+            config: Environment configuration. If None, defaults are used.
+
+        Initializes:
+            time: Current simulation time.
+            current_params: Active environmental parameters.
+            prev_params: Parameters from the previous step (used for deltas).
+        """
+
         self.model = model
-        self.config = config or {}
+        self.config = config or EnvironmentConfig()
 
         self.time = 0
         self.current_params = {
-            "temperature": 20.0,
-            "optimum_temperature": 0.5,
-            "food_availability": 5000,
-            "hazard_level": 0.1
+            "temperature": self.config.temp_start,
+            "optimum_temperature": self.config.optimum_temp_start,
+            "food_availability": self.config.food_availability,
+            "hazard_level": self.config.hazard_level_start,
         }
         self.prev_params = self.current_params.copy()
 
     def food_distribution(self):
+        """
+        Distribute available food among alive agents.
+
+        Agents are processed in weighted random order.
+
+        Agents with enough available food are fully fed.
+        Remaining agents become "hungry".
+        Hungry agents may compete with fed agents for resources.
+        """
+
         alive = [a for a in self.model.agents if a.is_alive]
 
         raw_weight = np.array([a.genes_map["speed"] * 2.0 / a.food_need for a in alive])
@@ -44,15 +77,25 @@ class Environment:
             self.model.population.compete(hungry, fed)
 
     def step(self):
+        """
+        Advance the environment by one step.
+
+        Updates environmental parameters according to configuration:
+
+        Triggers food distribution among agents.
+        """
+
         self.prev_params = self.current_params.copy()
         self.time += 1
 
-        self.current_params["temperature"] += 0.05
-        self.current_params["optimum_temperature"] += 0.00125
-        if self.current_params["temperature"] >= 50.0:
-            self.current_params["temperature"] = -5.0
-            self.current_params["optimum_temperature"] = 0.1
+        self.current_params["temperature"] += self.config.temp_step
+        self.current_params["optimum_temperature"] += self.config.optimum_temp_step
+        if self.current_params["temperature"] >= self.config.max_temperature:
+            self.current_params["temperature"] = self.config.temp_reset
+            self.current_params["optimum_temperature"] = self.config.optimum_temp_reset
 
-        self.current_params["hazard_level"] += 0.001
+        self.current_params["hazard_level"] += self.config.hazard_step
 
-        self.current_params["food_availability"] = REGEN_RATE
+        self.current_params["food_availability"] = self.config.food_availability
+
+        self.food_distribution()

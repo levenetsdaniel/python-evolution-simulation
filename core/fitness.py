@@ -1,42 +1,97 @@
 import numpy as np
+from config.sim_config import FitnessConfig, EnvironmentConfig
 
-MIN_TEMPERATURE = -30.0
-MAX_TEMPERATURE = 50.0
+config = FitnessConfig()
+env_config = EnvironmentConfig()
 
 
 def _temp_score(heat_res: float, cold_res: float, temp: float, optimum: float) -> float:
-    temp_norm = (temp - MIN_TEMPERATURE) / (MAX_TEMPERATURE - MIN_TEMPERATURE)
-    delta = temp_norm - 0.625
-    temp_intensity = abs(delta / 0.625)
+    """
+    Calculates the temperature score given an agent's heat resistance, cold resistance and environment's current temperature.
+
+    Args:
+        heat_res: Individual resistance to high temperatures.
+        cold_res: Individual resistance to low temperatures.
+        temp: Current environmental temperature.
+        optimum: Target (optimal) normalized temperature for fitness peak.
+
+    Returns:
+        A value in the range [score_floor, 1.0] representing temperature fitness.
+    """
+
+    temp_norm = (temp - env_config.min_temperature) / (env_config.max_temperature - env_config.min_temperature)
+    delta = temp_norm - config.temp_20_norm
+    temp_intensity = abs(delta / config.temp_20_norm)
     if delta >= 0:
         temp_res = 1 - temp_intensity * (1 - heat_res) * cold_res
     else:
         temp_res = 1 - temp_intensity * (1 - cold_res) * heat_res
 
-    temp_score = np.exp(- ((temp_res - 1.0) ** 2) / 0.5)
+    temp_score = np.exp(- ((temp_res - optimum) ** 2) / config.temp_score_sharpness)
 
-    return np.clip(temp_score, 0.05, 1.0)
+    return np.clip(temp_score, config.score_floor, 1.0)
 
 
 def _hazard_score(resilience: float, hazard: float) -> float:
+    """
+    Calculates the hazard score given an agent's resilience and environment's hazard level
+
+    Args:
+        resilience: Individual resilience trait.
+        hazard: Current environmental hazard level.
+
+    Returns:
+        A value in the range [score_floor, 1.0] representing hazard fitness.
+    """
+
     fragility = hazard * (1.0 - resilience)
     hazard_score = np.exp(-fragility ** 2)
 
-    return np.clip(hazard_score, 0.05, 1.0)
+    return np.clip(hazard_score, config.score_floor, 1.0)
 
 
 def _energy_score(satiation: float, resilience: float, metabolic_rate: float, aggressiveness: float) -> float:
-    efficiency = 1.0 - metabolic_rate * 0.5 - resilience * 0.2
+    """
+    Calculates the energy score given an agent's satiation, resilience, aggressiveness and metabolic rate.
+
+    Args:
+        satiation: Ratio of consumed food to required food.
+        resilience: Individual resilience trait.
+        metabolic_rate: Energy consumption rate.
+        aggressiveness: Individual aggression level.
+
+    Returns:
+        A value in the range [score_floor, 1.0] representing energy fitness.
+    """
+
+    efficiency = 1.0 - metabolic_rate * config.metabolic_rate_efficiency_penalty - resilience * config.resilience_efficiency_penalty
 
     aggression_excess = max(0.0, aggressiveness - metabolic_rate)
-    metabolic_penalty = aggression_excess * 0.1
+    metabolic_penalty = aggression_excess * config.aggression_metabolic_penalty
 
     energy_score = satiation * efficiency - metabolic_penalty
 
-    return np.clip(energy_score, 0.05, 1.0)
+    return np.clip(energy_score, config.score_floor, 1.0)
 
 
-def fitness(ind_params: dict, env_params: dict):
+def fitness(ind_params: dict[str, float], env_params: dict[str, float]) -> float:
+    """
+    Calculates the fitness given an individual's and environment's parameters
+
+    Fitness is calculated as a multiplicative product of three independent components:
+
+        - Temperature adaptation (_temp_score)
+        - Energy efficiency (_energy_score)
+        - Hazard resistance (_hazard_score)
+
+    Args:
+        ind_params: Dictionary of individual traits.
+        env_params: Dictionary of environmental parameters.
+
+    Returns:
+        A scalar fitness score in the range [score_floor, 1.0].
+    """
+
     temp_score = _temp_score(ind_params["heat_resistance"], ind_params["cold_resistance"], env_params["temperature"],
                              env_params["optimum_temperature"])
 
