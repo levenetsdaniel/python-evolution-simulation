@@ -5,9 +5,15 @@ from neural.advisor import CatBoostAdvisor
 
 
 def train_advisor(
-    buffer: TrainingBuffer,
-    advisor: CatBoostAdvisor,
+        buffer: TrainingBuffer,
+        advisor: CatBoostAdvisor,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Train the advisor on buffer samples and return the training arrays.
+
+    The target genome is reconstructed from the pre-mutation genome
+    and the recorded mutation deltas.
+    """
     if len(buffer.samples) == 0:
         raise ValueError("Can't train advisor: training buffer is empty.")
 
