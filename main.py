@@ -9,7 +9,7 @@ from config.cli import parse_args
 from core.model import Model
 
 if __name__ == "__main__":
-    config = parse_args()
+    config, _ = parse_args()
     model = Model(config)
     model.run(config.n_steps)
 

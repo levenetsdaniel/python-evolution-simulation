@@ -1,13 +1,14 @@
 import argparse
-from .sim_config import SimConfig, EnvironmentConfig, PopulationConfig, IndividualConfig
+from .sim_config import SimConfig, EnvironmentConfig, PopulationConfig, IndividualConfig, ProfilerConfig
 
 ind = IndividualConfig()
 pop = PopulationConfig()
 env = EnvironmentConfig()
 sim = SimConfig()
+prof = ProfilerConfig()
 
 
-def parse_args() -> SimConfig:
+def parse_args() -> tuple[SimConfig, ProfilerConfig]:
     """
     Parse CLI arguments into a simulation configuration.
 
@@ -46,9 +47,20 @@ def parse_args() -> SimConfig:
     parser.add_argument("--record", action="store_true", default=sim.record)
     parser.add_argument("--debug", action="store_true", default=sim.debug)
 
+    parser.add_argument("--output-dir", type=str, default=prof.output_dir)
+    parser.add_argument("--prof-filename", type=str, default=prof.prof_filename)
+    parser.add_argument("--text-summary-filename", type=str, default=prof.text_summary_filename)
+    parser.add_argument("--html-report-filename", type=str, default=prof.html_report_filename)
+    parser.add_argument("--top-n-text", type=int, default=prof.top_n_text)
+    parser.add_argument("--top-n-callers", type=int, default=prof.top_n_callers)
+    parser.add_argument("--top-n-flame", type=int, default=prof.top_n_flame)
+    parser.add_argument("--top-n-console", type=int, default=prof.top_n_console)
+
+    parser.add_argument("--view", action="store_true", default=prof.view)
+
     args = parser.parse_args()
 
-    return SimConfig(
+    sim_config = SimConfig(
         environment=EnvironmentConfig(
             food_availability=args.food_availability,
             max_temperature=args.max_temp,
@@ -84,3 +96,22 @@ def parse_args() -> SimConfig:
         record=args.record,
         debug=args.debug
     )
+
+    prof_conf = ProfilerConfig(
+        simulation_config=sim_config,
+
+        output_dir=args.output_dir,
+        prof_filename=args.prof_filename,
+        text_summary_filename=args.text_summary_filename,
+        html_report_filename=args.html_report_filename,
+        top_n_text=args.top_n_text,
+        top_n_callers=args.top_n_callers,
+        top_n_flame=args.top_n_flame,
+        top_n_console=args.top_n_console,
+
+        view=args.view
+    )
+
+    return sim_config, prof_conf
+
+
