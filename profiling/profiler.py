@@ -1,15 +1,18 @@
 import cProfile
+import pstats
+import webbrowser
 from pathlib import Path
 
 from config.sim_config import ProfilerConfig
 from core.model import Model
 
+from .report import render_html
 from .stats import print_console_summary, save_text_summary
 
 
 def run_profile(config: ProfilerConfig, project_root: Path) -> None:
     """
-    Run the simulation under cProfile.
+    Run the simulation under cProfile and write profiling artifacts.
 
     Args:
         config: Profiler configuration.
@@ -26,7 +29,7 @@ def run_profile(config: ProfilerConfig, project_root: Path) -> None:
     prof_path = output_dir / config.prof_filename.format(n_steps=n_steps)
 
     print(f"\n[EvoSim profiler]  n_steps={n_steps}  seed={seed}")
-    print("  imports already warmed up — profiler will capture simulation only")
+    print("  profiler will capture simulation only  ")
     print("-" * 60)
 
     pr = cProfile.Profile()
@@ -36,8 +39,15 @@ def run_profile(config: ProfilerConfig, project_root: Path) -> None:
 
     pr.dump_stats(str(prof_path))
     print(f"  .prof file    -> {prof_path}")
-    print(f"  text summary  -> {save_text_summary(pr, config, output_dir)}")
+    stats = pstats.Stats(pr)
 
-    print_console_summary(pr, config.top_n_console)
+    print(f"  text summary  -> {save_text_summary(stats, config, output_dir)}")
+    print(f"  HTML report   -> {render_html(stats, config, output_dir, project_root)}")
+
+    print_console_summary(stats, config.top_n_console)
+
+    html_path = output_dir / config.html_report_filename
+    if config.view:
+        webbrowser.open(html_path.as_uri())
 
     print("\nDone.")

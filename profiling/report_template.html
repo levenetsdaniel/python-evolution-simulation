@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvoSim — Profiling Report</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+        :root {
+            --bg: #0d0f14;
+            --surface: #13161e;
+            --surface2: #1a1e28;
+            --border: #252a38;
+            --accent: #4af09a;
+            --accent2: #f0a84a;
+            --accent3: #4ab8f0;
+            --danger: #f05a4a;
+            --text: #c8d0e0;
+            --text-dim: #5a6278;
+            --text-mid: #8892a4;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'IBM Plex Sans', sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        header {
+            padding: 40px 48px 32px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: flex-end;
+            gap: 32px;
+        }
+
+        .logo {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            color: var(--accent);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 300;
+            color: #fff;
+            letter-spacing: -0.02em;
+        }
+
+        h1 span {
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .meta {
+            margin-left: auto;
+            text-align: right;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 12px;
+            color: var(--text-dim);
+            line-height: 1.8;
+        }
+
+        .meta strong {
+            color: var(--text-mid);
+        }
+
+        main {
+            padding: 40px 48px;
+            max-width: 1400px;
+        }
+
+        section {
+            margin-bottom: 48px;
+        }
+
+        .section-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin-bottom: 20px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .section-title::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px 24px;
+        }
+
+        .card-label {
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+        }
+
+        .card-value {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 26px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .card-value.green {
+            color: var(--accent);
+        }
+
+        .card-value.amber {
+            color: var(--accent2);
+        }
+
+        .card-value.blue {
+            color: var(--accent3);
+        }
+
+        .card-sub {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-top: 4px;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .flamechart {
+            margin-bottom: 40px;
+        }
+
+        .flame-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 6px;
+            cursor: default;
+        }
+
+        .flame-row:hover .flame-bar-fill {
+            filter: brightness(1.2);
+        }
+
+        .flame-label {
+            width: 220px;
+            flex-shrink: 0;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 12px;
+            color: var(--text-mid);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: right;
+        }
+
+        .flame-label .func-name {
+            color: var(--text);
+        }
+
+        .flame-bar {
+            flex: 1;
+            height: 24px;
+            background: var(--surface2);
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .flame-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.4s cubic-bezier(.4, 0, .2, 1);
+            position: relative;
+        }
+
+        .flame-bar-fill::after {
+            content: attr(data-label);
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            color: rgba(0, 0, 0, 0.7);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .flame-ncalls {
+            width: 90px;
+            flex-shrink: 0;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            color: var(--text-dim);
+            text-align: right;
+        }
+
+        .sev-0 {
+            background: linear-gradient(90deg, #f05a4a, #e03020);
+        }
+
+        .sev-1 {
+            background: linear-gradient(90deg, #f0a84a, #e09030);
+        }
+
+        .sev-2 {
+            background: linear-gradient(90deg, #f0d04a, #d0b020);
+        }
+
+        .sev-3 {
+            background: linear-gradient(90deg, #a0e04a, #80c030);
+        }
+
+        .sev-4 {
+            background: linear-gradient(90deg, #4af09a, #30c070);
+        }
+
+        .sev-5 {
+            background: linear-gradient(90deg, #4ab8f0, #2090d0);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 12px;
+        }
+
+        thead tr {
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            padding: 8px 12px;
+            text-align: left;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+        }
+
+        th.r {
+            text-align: right;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #1a1e28;
+            transition: background 0.15s;
+        }
+
+        tbody tr:hover {
+            background: var(--surface2);
+        }
+
+        td {
+            padding: 9px 12px;
+            color: var(--text-mid);
+            vertical-align: middle;
+        }
+
+        td.r {
+            text-align: right;
+        }
+
+        td.func {
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        td.file {
+            color: var(--text-dim);
+            font-size: 11px;
+        }
+
+        .pct-bar {
+            display: inline-block;
+            height: 3px;
+            border-radius: 2px;
+            vertical-align: middle;
+            margin-right: 6px;
+            background: var(--accent);
+            opacity: 0.6;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 7px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+        }
+
+        .tag-hot {
+            background: rgba(240, 90, 74, 0.15);
+            color: #f05a4a;
+        }
+
+        .tag-warm {
+            background: rgba(240, 168, 74, 0.15);
+            color: var(--accent2);
+        }
+
+        .tag-ok {
+            background: rgba(74, 240, 154, 0.1);
+            color: var(--accent);
+        }
+
+        .insights {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .insight {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--accent2);
+            border-radius: 8px;
+            padding: 20px 24px;
+        }
+
+        .insight.critical {
+            border-left-color: var(--danger);
+        }
+
+        .insight.info {
+            border-left-color: var(--accent3);
+        }
+
+        .insight h3 {
+            font-size: 13px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+
+        .insight p {
+            font-size: 13px;
+            color: var(--text-mid);
+            line-height: 1.6;
+        }
+
+        .insight code {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 1px 6px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 12px;
+            color: var(--accent3);
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div>
+        <div class="logo">EvoSim · cProfile Report</div>
+        <h1>Performance <span>Analysis</span></h1>
+    </div>
+    <div class="meta">
+        <strong>Run:</strong> __RUN__<br>
+        <strong>Population:</strong> __POP__<br>
+        <strong>Python:</strong> __PYVER__<br>
+        <strong>Scope:</strong> simulation loop only
+    </div>
+</header>
+
+<main>
+
+    <div class="cards">
+        <div class="card">
+            <div class="card-label">Total runtime</div>
+            <div class="card-value green">__RUNTIME__</div>
+            <div class="card-sub">__STEPS_SUB__</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Hottest function</div>
+            <div class="card-value amber">__HOT_FN__</div>
+            <div class="card-sub">__HOT_PCT__</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Function calls</div>
+            <div class="card-value blue">__CALLS__</div>
+            <div class="card-sub">__PRIM__</div>
+        </div>
+        <div class="card">
+            <div class="card-label">EvoSim functions</div>
+            <div class="card-value">__N_FN__</div>
+            <div class="card-sub">profiled</div>
+        </div>
+    </div>
+
+    <section>
+        <div class="section-title">Self-time breakdown — project code only</div>
+        <div class="flamechart" id="flamechart"></div>
+    </section>
+
+    <section>
+        <div class="section-title">Detailed function table — EvoSim core</div>
+        <table id="func-table">
+            <thead>
+            <tr>
+                <th>Module</th>
+                <th>Function</th>
+                <th class="r">Calls</th>
+                <th class="r">Self time</th>
+                <th class="r">Self %</th>
+                <th class="r">Cum time</th>
+                <th class="r">Cum %</th>
+                <th>Status</th>
+            </tr>
+            </thead>
+            <tbody id="func-tbody"></tbody>
+        </table>
+    </section>
+
+</main>
+
+<script>
+    const EVOSIM = __EVOSIM_JSON__;
+
+    if (EVOSIM.length) {
+        const maxPct = EVOSIM[0].pct_tot || 1;
+        const colors = ['sev-0', 'sev-0', 'sev-1', 'sev-1', 'sev-2', 'sev-2', 'sev-3', 'sev-3', 'sev-3', 'sev-3', 'sev-3', 'sev-4', 'sev-4', 'sev-5', 'sev-5'];
+        const fc = document.getElementById('flamechart');
+        EVOSIM.forEach((r, i) => {
+            const width = (r.pct_tot / maxPct * 100).toFixed(1);
+            const sev = colors[i] || 'sev-5';
+            const row = document.createElement('div');
+            row.className = 'flame-row';
+            row.innerHTML = `
+      <div class="flame-label"><span class="func-name">${r.func}</span><br><span style="font-size:10px;color:var(--text-dim)">${r.file.split('/').pop()}:${r.line}</span></div>
+      <div class="flame-bar"><div class="flame-bar-fill ${sev}" style="width:${width}%" data-label="${r.pct_tot.toFixed(2)}%"></div></div>
+      <div class="flame-ncalls">${r.ncalls.toLocaleString()}×</div>`;
+            fc.appendChild(row);
+        });
+
+        const tbody = document.getElementById('func-tbody');
+        EVOSIM.forEach(r => {
+            const tag = r.pct_tot >= 5 ? '<span class="tag tag-hot">HOT</span>'
+                : r.pct_tot >= 1 ? '<span class="tag tag-warm">WARM</span>'
+                    : '<span class="tag tag-ok">OK</span>';
+            const barW = Math.max(4, r.pct_tot / maxPct * 80);
+            tbody.innerHTML += `
+      <tr>
+        <td class="file">${r.file}</td>
+        <td class="func">${r.func}<span style="color:var(--text-dim);font-size:11px"> :${r.line}</span></td>
+        <td class="r">${r.ncalls.toLocaleString()}</td>
+        <td class="r">${r.tottime.toFixed(4)}s</td>
+        <td class="r"><span class="pct-bar" style="width:${barW}px"></span>${r.pct_tot.toFixed(2)}%</td>
+        <td class="r">${r.cumtime.toFixed(4)}s</td>
+        <td class="r" style="color:var(--text-dim)">${r.pct_cum.toFixed(2)}%</td>
+        <td>${tag}</td>
+      </tr>`;
+        });
+    } else {
+        document.getElementById('flamechart').innerHTML =
+            '<div style="color:var(--text-dim);font-family:monospace;font-size:12px">No project-code samples captured.</div>';
+    }
+</script>
+</body>
+</html>

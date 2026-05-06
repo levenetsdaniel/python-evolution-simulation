@@ -1,4 +1,3 @@
-import cProfile
 import io
 import pstats
 from pathlib import Path
@@ -35,21 +34,22 @@ def is_project_file(filename: str, project_root: Path) -> bool:
     return p.name != "profile_run.py"
 
 
-def collect_rows(pr: cProfile.Profile, total_tt: float, project_root: Path) -> list[dict]:
+def collect_rows(stats: pstats.Stats, project_root: Path) -> list[dict]:
     """
     Extract one row per project-code function from the cProfile stats.
 
     Args:
-        pr: A finalized cProfile.Profile instance.
-        total_tt: Total runtime, used to compute percentages.
+        stats: A loaded pstats.Stats instance (from a Profile or a .prof file).
         project_root: Absolute path to the EvoSim project root.
 
     Returns:
         List of dicts sorted by self time descending.
     """
 
-    rows = []
-    for (filename, lineno, funcname), (_cc, nc, tt, ct, _) in pstats.Stats(pr).stats.items():
+    total_tt = stats.total_tt or 1e-9
+
+    rows: list[dict] = []
+    for (filename, lineno, funcname), (_cc, nc, tt, ct, _) in stats.stats.items():
         if not is_project_file(filename, project_root):
             continue
         rel = Path(filename).resolve().relative_to(project_root).as_posix()
@@ -67,12 +67,40 @@ def collect_rows(pr: cProfile.Profile, total_tt: float, project_root: Path) -> l
     return rows
 
 
-def save_text_summary(pr: cProfile.Profile, config: ProfilerConfig, output_dir: Path) -> Path:
+def _capture(stats: pstats.Stats, sort_key: str, n: int, callers: bool = False) -> str:
+    """
+    Capture the output of ``print_stats`` / ``print_callers`` into a string.
+
+    Args:
+        stats: A loaded pstats.Stats instance.
+        sort_key: pstats sort key (e.g. ``"tottime"``, ``"cumulative"``).
+        n: Top-N rows to include.
+        callers: If True, emit ``print_callers`` instead of ``print_stats``.
+
+    Returns:
+        Captured text output as a string.
+    """
+
+    buf = io.StringIO()
+    old_stream = stats.stream
+    stats.stream = buf
+    try:
+        sorted_stats = stats.sort_stats(sort_key)
+        if callers:
+            sorted_stats.print_callers(n)
+        else:
+            sorted_stats.print_stats(n)
+    finally:
+        stats.stream = old_stream
+    return buf.getvalue()
+
+
+def save_text_summary(stats: pstats.Stats, config: ProfilerConfig, output_dir: Path) -> Path:
     """
     Write a sorted text summary (cumulative + self time + callers) to disk.
 
     Args:
-        pr: A finalized cProfile.Profile instance.
+        stats: A loaded pstats.Stats instance.
         config: Profiler configuration controlling top-N sizes and filename.
         output_dir: Directory where the summary file will be created.
 
@@ -85,32 +113,28 @@ def save_text_summary(pr: cProfile.Profile, config: ProfilerConfig, output_dir: 
     with open(out, "w", encoding="utf-8") as f:
         f.write(f"EvoSim cProfile report — {n_steps} steps\n")
         f.write("=" * 70 + "\n\n")
+
         for sort_key, label in [
             ("cumulative", f"CUMULATIVE TIME — top {config.top_n_text}"),
             ("tottime", f"SELF TIME — top {config.top_n_text}"),
         ]:
             f.write(f"--- {label} ---\n")
-            buf = io.StringIO()
-            pstats.Stats(pr, stream=buf).sort_stats(sort_key).print_stats(config.top_n_text)
-            f.write(buf.getvalue() + "\n")
+            f.write(_capture(stats, sort_key, config.top_n_text) + "\n")
+
         f.write(f"--- CALLERS of top {config.top_n_callers} hot functions ---\n")
-        buf = io.StringIO()
-        pstats.Stats(pr, stream=buf).sort_stats("tottime").print_callers(config.top_n_callers)
-        f.write(buf.getvalue())
+        f.write(_capture(stats, "tottime", config.top_n_callers, callers=True))
     return out
 
 
-def print_console_summary(pr: cProfile.Profile, n: int) -> None:
+def print_console_summary(stats: pstats.Stats, n: int) -> None:
     """
     Print the top-N self-time entries to stdout.
 
     Args:
-        pr: A finalized cProfile.Profile instance.
+        stats: A loaded pstats.Stats instance.
         n: Number of entries to print.
     """
 
-    buf = io.StringIO()
-    pstats.Stats(pr, stream=buf).sort_stats("tottime").print_stats(n)
     print(f"\nTop {n} by self time:")
-    for line in buf.getvalue().splitlines():
+    for line in _capture(stats, "tottime", n).splitlines():
         print(line)
