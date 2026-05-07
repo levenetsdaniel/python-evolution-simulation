@@ -4,7 +4,7 @@ profile_run.py — entry point for profiling EvoSim with cProfile.
 Usage:
     python profile_run.py
     python profile_run.py --n-steps 500
-    python profile_run.py --view           # open HTML report in browser (not released yet)
+    python profile_run.py --view
 """
 
 from __future__ import annotations
