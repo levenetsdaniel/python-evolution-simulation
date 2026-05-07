@@ -101,7 +101,7 @@ def test_satiation_unfed_full_and_overfed():
     assert ind.satiation == 0.0
     ind.food_eaten = ind.food_need
     assert ind.satiation == pytest.approx(1.0)
-    ind.food_eaten = ind.food_need * 2  # compete() can push above 1
+    ind.food_eaten = ind.food_need * 2
     assert ind.satiation == pytest.approx(2.0)
 
 
@@ -113,7 +113,7 @@ def test_compute_fitness_matches_pure_function_and_does_not_mutate():
 
     expected = fitness_fn({**ind.genes_map, "satiation": 1.0}, m.environment.current_params)
     assert ind.compute_fitness() == pytest.approx(expected)
-    assert ind.genes_map == snapshot  # .copy() should preserve the original
+    assert ind.genes_map == snapshot
 
 def test_step_records_fitness_and_increments_age_when_alive():
     m = StubModel()

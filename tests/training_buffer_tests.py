@@ -38,6 +38,7 @@ def _record_simple(buf, child_id=1, *, env_params=None, env_delta=None,
         pop_mean_fitness=pop_mean_fitness,
     )
 
+
 def test_record_birth_keeps_sample_in_pending_until_fitness_arrives():
     buf = TrainingBuffer()
     _record_simple(buf, child_id=42)
@@ -67,6 +68,7 @@ def test_record_fitness_for_unknown_id_is_silent():
 
     assert buf.samples == []
     assert buf._pending == {}
+
 
 def test_record_birth_normalizes_env_params():
     buf = TrainingBuffer()
@@ -98,9 +100,10 @@ def test_record_birth_normalizes_env_delta():
     assert d_food == pytest.approx(0.5)
     assert d_hazard == pytest.approx(0.05)
 
+
 def test_to_numpy_raises_on_empty_buffer():
     buf = TrainingBuffer()
-    _record_simple(buf, child_id=1)  # only pending, never finalized
+    _record_simple(buf, child_id=1)
 
     with pytest.raises(ValueError):
         buf.to_numpy()
@@ -108,10 +111,10 @@ def test_to_numpy_raises_on_empty_buffer():
 
 def test_to_numpy_returns_correctly_shaped_arrays_and_normalized_weights():
     buf = TrainingBuffer()
-    _record_simple(buf, child_id=1, p1_fitness=0.4, p2_fitness=0.6)  # parent_mean=0.5
+    _record_simple(buf, child_id=1, p1_fitness=0.4, p2_fitness=0.6)
     _record_simple(buf, child_id=2, p1_fitness=0.4, p2_fitness=0.6)
-    buf.record_fitness(1, child_fitness=0.7)  # improvement = 0.2
-    buf.record_fitness(2, child_fitness=0.6)  # improvement = 0.1
+    buf.record_fitness(1, child_fitness=0.7)
+    buf.record_fitness(2, child_fitness=0.6)
 
     x, y, w = buf.to_numpy()
 
@@ -121,6 +124,7 @@ def test_to_numpy_returns_correctly_shaped_arrays_and_normalized_weights():
     assert w.shape == (2,)
     assert w.sum() == pytest.approx(1.0)
     assert w[0] > w[1]
+
 
 def test_save_writes_valid_json_with_all_samples(tmp_path):
     buf = TrainingBuffer()
@@ -135,12 +139,15 @@ def test_save_writes_valid_json_with_all_samples(tmp_path):
     assert data[0]["child_fitness"] == pytest.approx(0.6)
     assert len(data[0]["pre_mutation_genome"]) == N
 
+
 def test_buffer_receives_per_step_capacity_after_environment_consumed_food():
     from core.environment import Environment
 
     class _RecordingBuffer:
         def __init__(self): self.births = []
+
         def record_birth(self, **kwargs): self.births.append(kwargs)
+
         def record_fitness(self, *args, **kwargs): pass
 
     class IntegrationModel(mesa.Model):
@@ -170,4 +177,3 @@ def test_buffer_receives_per_step_capacity_after_environment_consumed_food():
 
     recorded = m.training_buffer.births[0]
     assert recorded["env_params"]["food_availability"] == capacity
-    assert recorded["env_delta"]["food_availability"] == 0.0

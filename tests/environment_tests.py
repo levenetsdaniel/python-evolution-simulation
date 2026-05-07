@@ -57,7 +57,7 @@ def test_init_sets_params_from_config_and_independent_prev_copy():
         "hazard_level": 0.2,
     }
     assert env.prev_params == env.current_params
-    assert env.prev_params is not env.current_params  # independent copies
+    assert env.prev_params is not env.current_params
 
 def test_step_advances_params_and_snapshots_prev():
     cfg = EnvironmentConfig(
