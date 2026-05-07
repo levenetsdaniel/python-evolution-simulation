@@ -19,6 +19,7 @@ TEST_FILES = [
     "tests/individual_tests.py",
     "tests/population_tests.py",
     "tests/environment_tests.py",
+    "tests/trainig_buffer_tests.py",
 ]
 
 
