@@ -10,6 +10,7 @@ from config.sim_config import EnvironmentConfig, PopulationConfig
 from core.enums import DeathCause
 from core.individual import Individual
 from core.population import Population
+from core.environment import Environment
 from core.training_buffer import TrainingBuffer
 
 LABELS = PopulationConfig().genome_labels
@@ -141,8 +142,6 @@ def test_save_writes_valid_json_with_all_samples(tmp_path):
 
 
 def test_buffer_receives_per_step_capacity_after_environment_consumed_food():
-    from core.environment import Environment
-
     class _RecordingBuffer:
         def __init__(self): self.births = []
 
@@ -167,7 +166,7 @@ def test_buffer_receives_per_step_capacity_after_environment_consumed_food():
     parent.fitness = 0.5
 
     m.environment.step()
-    assert m.environment.current_params["current_food"] < capacity
+    assert m.environment.current_food < capacity
 
     m.population.record_birth(
         child_id=1, p1=parent, p2=parent,
@@ -177,3 +176,4 @@ def test_buffer_receives_per_step_capacity_after_environment_consumed_food():
 
     recorded = m.training_buffer.births[0]
     assert recorded["env_params"]["food_availability"] == capacity
+    assert recorded["env_delta"]["food_availability"] == 0.0

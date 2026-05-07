@@ -74,6 +74,26 @@ def _energy_score(satiation: float, resilience: float, metabolic_rate: float, ag
     return np.clip(energy_score, config.score_floor, 1.0)
 
 
+def _proportion_score(speed: float, size: float, metabolic_rate:float) -> float:
+    """
+        Penalize agents whose speed or size is disproportionate to their metabolic rate.
+
+        Args:
+            speed: Individual speed trait.
+            size: Individual size trait.
+            metabolic_rate: Energy consumption rate.
+
+        Returns:
+            A value in the range [score_floor, 1.0] representing body-proportion fitness.
+        """
+
+    speed_excess = max(0.0, speed - config.speed_metabolic_ratio * metabolic_rate)
+    size_excess = max(0.0, size - config.size_metabolic_ratio * metabolic_rate)
+    penalty = (speed_excess + size_excess) * config.proportion_penalty
+
+    return np.clip(1.0 - penalty, config.score_floor, 1.0)
+
+
 def fitness(ind_params: dict[str, float], env_params: dict[str, float]) -> float:
     """
     Calculates the fitness given an individual's and environment's parameters
@@ -83,6 +103,7 @@ def fitness(ind_params: dict[str, float], env_params: dict[str, float]) -> float
         - Temperature adaptation (_temp_score)
         - Energy efficiency (_energy_score)
         - Hazard resistance (_hazard_score)
+        - Body proportions (_proportion_score)
 
     Args:
         ind_params: Dictionary of individual traits.
@@ -100,6 +121,8 @@ def fitness(ind_params: dict[str, float], env_params: dict[str, float]) -> float
 
     hazard_score = _hazard_score(ind_params["resilience"], env_params["hazard_level"])
 
-    fitness_score = temp_score * energy_score * hazard_score
+    proportion_score = _proportion_score(ind_params["speed"], ind_params["size"], ind_params["metabolic_rate"])
+
+    fitness_score = temp_score * energy_score * hazard_score * proportion_score
 
     return fitness_score

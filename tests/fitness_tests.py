@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from config.sim_config import EnvironmentConfig, FitnessConfig
-from core.fitness import _energy_score, _hazard_score, _temp_score, fitness
+from core.fitness import _energy_score, _hazard_score, _temp_score, _proportion_score, fitness
 
 FCFG = FitnessConfig()
 ECFG = EnvironmentConfig()
@@ -166,6 +166,40 @@ def _make_env(**params) -> dict:
     return base
 
 
+class TestProportionScore:
+    """Body-proportion score."""
+
+    def test_perfect_score_when_within_bounds(self):
+        assert _proportion_score(speed=0.5, size=0.5, metabolic_rate=0.5) == pytest.approx(1.0)
+
+    def test_perfect_score_at_exact_ratios(self):
+        assert _proportion_score(speed=1.0, size=0.75, metabolic_rate=0.5) == pytest.approx(1.0)
+
+    def test_speed_excess_lowers_score(self):
+        baseline = _proportion_score(speed=0.4, size=0.0, metabolic_rate=0.2)
+        bad = _proportion_score(speed=1.0, size=0.0, metabolic_rate=0.2)
+        assert baseline == pytest.approx(1.0)
+        assert bad == pytest.approx(0.4)
+
+    def test_size_excess_lowers_score(self):
+        bad = _proportion_score(speed=0.0, size=1.0, metabolic_rate=0.2)
+        assert bad == pytest.approx(0.3)
+
+    def test_clipped_to_score_floor_for_extreme_disproportion(self):
+        s = _proportion_score(speed=1.0, size=1.0, metabolic_rate=0.0)
+        assert s == pytest.approx(FLOOR)
+
+    def test_zero_metabolic_with_zero_body_is_fine(self):
+        assert _proportion_score(speed=0.0, size=0.0, metabolic_rate=0.0) == pytest.approx(1.0)
+
+    def test_full_grid_within_bounds(self):
+        for speed in np.linspace(0.0, 1.0, 5):
+            for size in np.linspace(0.0, 1.0, 5):
+                for met in np.linspace(0.0, 1.0, 5):
+                    s = _proportion_score(speed, size, met)
+                    assert FLOOR - 1e-9 <= s <= 1.0 + 1e-9
+
+
 class TestFitness:
     """Composite fitness = temp_score * energy_score * hazard_score."""
 
@@ -178,15 +212,9 @@ class TestFitness:
                 * _energy_score(ind["satiation"], ind["resilience"],
                                 ind["metabolic_rate"], ind["aggressiveness"])
                 * _hazard_score(ind["resilience"], env["hazard_level"])
+                * _proportion_score(ind["speed"], ind["size"], ind["metabolic_rate"])
         )
         assert fitness(ind, env) == pytest.approx(expected)
-
-    def test_ideal_individual_in_ideal_env_scores_one(self):
-        ind = _make_ind(metabolic_rate=0.0, resilience=0.0,
-                        aggressiveness=0.0, satiation=1.0)
-        env = _make_env(temperature=_comfort_temp(),
-                        optimum_temperature=1.0, hazard_level=0.0)
-        assert fitness(ind, env) == pytest.approx(1.0)
 
     def test_low_satiation_lowers_total_fitness(self):
         env = _make_env()

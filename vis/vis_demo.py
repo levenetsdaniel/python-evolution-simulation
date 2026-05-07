@@ -6,7 +6,7 @@ from vis.history import collect_history
 from vis.plots import build_all_figures, save_figures
 
 
-def run_visualization_demo(n_steps: int = 100, seed: int = 0, output_dir: str | Path = "graphics") -> None:
+def run_visualization_demo(n_steps: int = 600, seed: int = 0, output_dir: str | Path = "graphics") -> None:
     """
     Run one simulation and save all basic visualization figures.
     """

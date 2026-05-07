@@ -1,4 +1,4 @@
-"""Unit tests for core/environment.py."""
+"""Tests for core/environment.py."""
 
 import mesa
 import numpy as np
@@ -17,6 +17,11 @@ class _RecordingPopulation:
     def __init__(self):
         self.compete_calls: list[tuple] = []
 
+    def remove_food(self):
+        for a in self.model.agents:
+            if a.is_alive:
+                a.food_eaten = 0
+
     def compete(self, hungry, fed):
         self.compete_calls.append((list(hungry), list(fed)))
 
@@ -27,6 +32,7 @@ class StubModel(mesa.Model):
     def __init__(self, seed=0):
         super().__init__(rng=seed)
         self.population = _RecordingPopulation()
+        self.population.model = self
 
 
 def make_ind(model, *, genome=None, food_eaten=0, alive=True):
@@ -113,7 +119,7 @@ def test_food_distribution_resets_food_eaten_at_start():
     assert a2.food_eaten == 0
 
 
-def test_food_distribution_feeds_agents_within_capacity():
+def test_food_distribution_depletes_current_food_but_preserves_capacity():
     m = StubModel()
     env = Environment(m, config=EnvironmentConfig(food_availability=1000.0))
 
@@ -124,10 +130,23 @@ def test_food_distribution_feeds_agents_within_capacity():
 
     assert a1.food_eaten == a1.food_need
     assert a2.food_eaten == a2.food_need
-    assert env.current_params["food_availability"] == pytest.approx(
-        1000.0 - a1.food_need - a2.food_need
-    )
+    assert env.current_food == pytest.approx(1000.0 - a1.food_need - a2.food_need)
+    assert env.current_params["food_availability"] == 1000.0
     assert m.population.compete_calls == []
+
+
+def test_food_distribution_resets_current_food_each_round():
+    m = StubModel()
+    env = Environment(m, config=EnvironmentConfig(food_availability=1000.0))
+    make_ind(m)
+
+    env.food_distribution()
+    assert env.current_food < 1000.0
+
+    env.food_distribution()
+    assert env.current_food > 0
+    assert env.current_food < 1000.0
+    assert env.current_params["food_availability"] == 1000.0
 
 
 def test_food_distribution_invokes_compete_when_some_agents_remain_hungry():

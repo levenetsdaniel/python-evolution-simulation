@@ -218,6 +218,25 @@ def test_compete_with_empty_fed_list_is_a_noop():
 
     assert attacker.food_eaten == 0
 
+
+def test_compete_handles_zero_power_agents_without_warning():
+    import warnings
+
+    m = StubModel()
+    pop = Population(m)
+
+    zero_genome = np.zeros(N)
+    attacker = make_ind(m, food_eaten=0, genome=zero_genome)
+    victim = make_ind(m, food_eaten=100, genome=zero_genome)
+    m.rng = _StubRNG(random_val=0.0)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        pop.compete(hungry=[attacker], fed=[victim])
+
+    assert not np.isnan(attacker.food_eaten)
+    assert not np.isnan(victim.food_eaten)
+
 def test_reproduce_no_offspring_without_one_of_the_genders():
     m = StubModel()
     pop = Population(m)
