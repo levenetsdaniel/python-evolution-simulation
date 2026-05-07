@@ -67,7 +67,7 @@ def collect_rows(stats: pstats.Stats, project_root: Path) -> list[dict]:
     return rows
 
 
-def _capture(stats: pstats.Stats, sort_key: str, n: int, callers: bool = False) -> str:
+def _capture(stats: pstats.Stats, sort_key: str, n: int, callers: bool = False) -> str | None:
     """
     Capture the output of ``print_stats`` / ``print_callers`` into a string.
 
@@ -126,7 +126,7 @@ def save_text_summary(stats: pstats.Stats, config: ProfilerConfig, output_dir: P
     return out
 
 
-def print_console_summary(stats: pstats.Stats, n: int) -> None:
+def print_console_summary(stats: pstats.Stats, n: int):
     """
     Print the top-N self-time entries to stdout.
 
