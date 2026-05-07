@@ -74,3 +74,21 @@ class SimConfig:
     individual_info: bool = False
     record: bool = False
     debug: bool = False
+
+@dataclass
+class ProfilerConfig:
+    """Parameters controlling the profiler."""
+
+    simulation_config: SimConfig = field(default_factory=SimConfig)
+
+    output_dir: str = "reports"
+    prof_filename: str = "evosim.prof"
+    text_summary_filename: str = "cprofile_summary.txt"
+    html_report_filename: str = "profiling_report.html"
+
+    top_n_text: int = 50
+    top_n_callers: int = 10
+    top_n_flame: int = 15
+    top_n_console: int = 15
+
+    view: bool = False

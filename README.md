@@ -187,3 +187,61 @@ python main.py --n-steps 1000 --record --output data/run_01.json
 ```bash
 python main.py --n-steps 50 --debug --population-info --individual-info
 ```
+
+## Профилирование
+ 
+Профайлер прогоняет симуляцию под `cProfile` и собирает три артефакта в каталоге `reports/`:
+ 
+| Файл | Назначение |
+|---|---|
+| `evosim_sim_<N>steps.prof` | Бинарный дамп `cProfile` |
+| `cprofile_summary.txt` | Текстовая сводка top-N по cumtime + tottime + callers |
+| `profiling_report.html` | Кастомный HTML-отчёт по коду проекта |
+ 
+Импорты `mesa` / `numpy` / `pandas` / `scipy` в профилирование не включены
+
+### Запуск
+ 
+```bash
+python profile_run.py [опции]
+```
+ 
+Профайлер использует тот же CLI-парсер, что и `main.py`, поэтому все флаги симуляции (`--n-steps`, `--seed`, `--population-size`, `--mutation-std` и т.д.) применяются к прогоняемой модели как обычно. Дополнительные флаги, специфичные для профайлера:
+ 
+| Флаг | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `--output-dir` | str | `reports` | Каталог для всех артефактов |
+| `--prof-filename` | str | `evosim.prof` | Имя `.prof` дампа |
+| `--text-summary-filename` | str | `cprofile_summary.txt` | Имя текстовой сводки |
+| `--html-report-filename` | str | `profiling_report.html` | Имя HTML-отчёта |
+| `--top-n-text` | int | `50` | Сколько строк включать в текстовую сводку |
+| `--top-n-callers` | int | `10` | Сколько горячих функций раскрывать в секции callers |
+| `--top-n-flame` | int | `15` | Сколько строк показывать во флеймчарте HTML |
+| `--top-n-console` | int | `15` | Сколько строк печатать в stdout по завершении |
+| `--view` | flag | off | Автоматически открыть HTML-отчёт в браузере |
+ 
+### Примеры
+ 
+Базовый прогон, 200 шагов:
+ 
+```bash
+python profile_run.py --n-steps 200
+```
+ 
+С автооткрытием HTML-отчёта по завершении:
+ 
+```bash
+python profile_run.py --n-steps 500 --view
+```
+ 
+Углублённый анализ — больше callers и больше строк во флеймчарте:
+ 
+```bash
+python profile_run.py --n-steps 500 --top-n-callers 20 --top-n-flame 25
+```
+ 
+Профилирование с увеличенным стартовым размером популяции:
+ 
+```bash
+python profile_run.py --n-steps 1000 --population-size 300
+```
