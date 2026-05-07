@@ -41,6 +41,7 @@ def parse_args() -> tuple[SimConfig, ProfilerConfig]:
     parser.add_argument("--seed", type=int, default=sim.seed)
     parser.add_argument("--output", type=str, default=sim.output_path)
     parser.add_argument("--steps-info", type=int, default=sim.steps_info)
+    parser.add_argument("--shift-strength", type=float, default=sim.shift_strength)
     parser.add_argument("--model-info", action="store_true", default=sim.model_info)
     parser.add_argument("--population-info", action="store_true", default=sim.population_info)
     parser.add_argument("--individual-info", action="store_true", default=sim.individual_info)
@@ -87,6 +88,7 @@ def parse_args() -> tuple[SimConfig, ProfilerConfig]:
         ),
 
         n_steps=args.n_steps,
+        shift_strength=args.shift_strength,
         seed=args.seed,
         output_path=args.output,
         steps_info=args.steps_info,

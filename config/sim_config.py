@@ -72,6 +72,7 @@ class SimConfig:
     seed: int = 42
     output_path: str = "data/training_samples.json"
     steps_info: int = 5
+    shift_strength: float = 0.7
     model_info: bool = False
     population_info: bool = False
     individual_info: bool = False

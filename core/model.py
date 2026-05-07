@@ -5,6 +5,7 @@ from config.sim_config import SimConfig
 
 from .enums import DeathCause
 from .environment import Environment
+from .mutation_patterns import MutationStrategy, BaselineMutation
 from .population import Population
 from .training_buffer import TrainingBuffer
 
@@ -16,7 +17,7 @@ class Model(mesa.Model):
     The model executes a step-based simulation loop and tracks key statistics.
     """
 
-    def __init__(self, config: SimConfig | None = None):
+    def __init__(self, config: SimConfig | None = None, mutation_strategy: MutationStrategy | None = None):
         """
         Initialize the simulation model.
 
@@ -35,6 +36,8 @@ class Model(mesa.Model):
         super().__init__(rng=self.config.seed)
         self.step_count = 0
 
+        self.mutation_strategy = mutation_strategy or BaselineMutation(self.config.population.mutation_std)
+
         self.environment = Environment(self, config=self.config.environment)
 
         self.population = Population(self, config=self.config.population)
@@ -46,12 +49,20 @@ class Model(mesa.Model):
         self.births_this_step = 0
         self.datacollector = mesa.DataCollector(
             model_reporters={
-                "Step": "step_count",
+                "Step": lambda m: m.step_count,
                 "Generation": lambda m: m.population.generation,
                 "PopulationSize": lambda m: m.population.actual_pop_size,
 
                 "AvgFitness": lambda m: m.population.avg_fitness,
                 "AvgAge": lambda m: m.population.avg_age,
+                "AvgSatiation": lambda m: m.population.avg_satiation,
+                "AvgHeatResistance": lambda m: m.population.avg_heat_resistance,
+                "AvgColdResistance": lambda m: m.population.avg_cold_resistance,
+                "AvgMetabolicRate": lambda m: m.population.avg_metabolic_rate,
+                "AvgResilience": lambda m: m.population.avg_resilience,
+                "AvgSize": lambda m: m.population.avg_size,
+                "AvgSpeed": lambda m: m.population.avg_speed,
+                "AvgAggressiveness": lambda m: m.population.avg_aggressiveness,
 
                 "BirthCount": lambda m: m.births_this_step,
 
@@ -70,6 +81,33 @@ class Model(mesa.Model):
 
         self.population.initialize()
 
+    def _display_info(self):
+        print("step", self.step_count)
+
+        print("Temperature", float(self.environment.current_params["temperature"]))
+
+        print("HazardLevel", float(self.environment.current_params["hazard_level"]))
+
+        print("FoodCount", float(self.environment.current_params["food_availability"]))
+
+        print("AvgFitness", float(self.datacollector.model_reporters["AvgFitness"](self)))
+
+        print("AvgHeatResistance", self.population.avg_heat_resistance)
+
+        print("AvgColdResistance", self.population.avg_cold_resistance)
+
+        print("AvgSize", self.population.avg_size)
+
+        print("AvgSpeed", self.population.avg_speed)
+
+        print("AvgResilience", self.population.avg_resilience)
+
+        print("AvgAggressivness", self.population.avg_aggressiveness)
+
+        print("Females", self.population.count_females)
+
+        print("Males", self.population.count_males, "\n")
+
     def step(self):
         """Advance the simulation by one time step."""
 
@@ -81,6 +119,9 @@ class Model(mesa.Model):
         self.population.step()
         self.step_count += 1
         self.datacollector.collect(self)
+
+        if self.config.debug:
+            self._display_info()
 
     def run(self, n_steps: int = 100):
         """
@@ -110,31 +151,7 @@ class Model(mesa.Model):
                 break
 
             if self.config.debug:
-                print("step", _)
-
-                print("Temperature", float(self.environment.current_params["temperature"]))
-
-                print("HazardLevel", float(self.environment.current_params["hazard_level"]))
-
-                print("FoodCount", float(self.environment.current_params["food_availability"]))
-
-                print("AvgFitness", float(self.datacollector.model_reporters["AvgFitness"](self)))
-
-                print("AvgHeatResistance", self.population.avg_heat_resistance)
-
-                print("AvgColdResistance", self.population.avg_cold_resistance)
-
-                print("AvgSize", self.population.avg_size)
-
-                print("AvgSpeed", self.population.avg_speed)
-
-                print("AvgResilience", self.population.avg_resilience)
-
-                print("AvgAggressivness", self.population.avg_aggressiveness)
-
-                print("Females", self.population.count_females)
-
-                print("Males", self.population.count_males, "\n")
+                self._display_info()
 
             if self.config.record:
                 self.training_buffer.save(self.config.output_path)
