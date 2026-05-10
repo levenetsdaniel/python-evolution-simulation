@@ -5,6 +5,7 @@ data/
 catboost_info/
 *.cbm
 models/*.cbm
-.benchmarks
+.benchmarks/
 graphics/
 reports/
+outputs/
