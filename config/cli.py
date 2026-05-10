@@ -38,6 +38,7 @@ def parse_args() -> tuple[SimConfig, ProfilerConfig]:
     parser.add_argument("--min-temp", type=float, default=env.min_temperature)
 
     parser.add_argument("--n-steps", type=int, default=sim.n_steps)
+    parser.add_argument("--retrain-steps", type=int, default=sim.retrain_steps)
     parser.add_argument("--seed", type=int, default=sim.seed)
     parser.add_argument("--output", type=str, default=sim.output_path)
     parser.add_argument("--steps-info", type=int, default=sim.steps_info)
@@ -88,6 +89,7 @@ def parse_args() -> tuple[SimConfig, ProfilerConfig]:
         ),
 
         n_steps=args.n_steps,
+        retrain_steps=args.retrain_steps,
         shift_strength=args.shift_strength,
         seed=args.seed,
         output_path=args.output,

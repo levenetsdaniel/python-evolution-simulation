@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 from core.individual import Individual
 from neural.advisor import CatBoostAdvisor
+from neural.trainer import train_advisor
 
 if TYPE_CHECKING:
     from .model import Model
@@ -9,6 +10,7 @@ if TYPE_CHECKING:
 from abc import ABC, abstractmethod
 import numpy as np
 from config.sim_config import EnvironmentConfig, SimConfig
+from core.training_buffer import TrainingBuffer
 from neural.mutation import neural_mutate
 
 ENV_CNF = EnvironmentConfig()
@@ -28,8 +30,7 @@ class BaselineMutation(MutationStrategy):
     def __init__(self, std: float):
         self._std = std
 
-    def mutate(self, pre_genome: np.ndarray, p1: Individual, p2: Individual, model: "Model") -> tuple[
-        np.ndarray, np.ndarray]:
+    def mutate(self, pre_genome: np.ndarray, p1: Individual, p2: Individual, model: "Model") -> tuple[np.ndarray, np.ndarray]:
         noise = model.rng.normal(0, self._std, size=len(pre_genome))
         genome = np.clip(pre_genome + noise, 0.0, 1.0)
         mutations_deltas = genome - pre_genome
@@ -83,3 +84,13 @@ class NeuralMutation(MutationStrategy):
             parent_mean_fitness=parent_mean_fitness,
             shift_strength=self._shift_strength,
         )
+
+    def retrain(self, training_buffer: TrainingBuffer):
+        """
+        Retrains advisor
+
+        Args:
+            training_buffer: training buffer from model.
+        """
+
+        train_advisor(training_buffer, self._advisor)

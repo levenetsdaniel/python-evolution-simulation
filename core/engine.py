@@ -30,6 +30,9 @@ class Engine:
             self.baseline.step()
 
         if not is_extinct(self.neuralline):
+            if self.neuralline.step_count != 0 and self.neuralline.step_count % self.config.retrain_steps == 0:
+                self.neuralline.mutation_strategy.retrain(self.baseline.training_buffer)
+
             self.neuralline.step()
 
     def run(self, n_steps: int):
