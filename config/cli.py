@@ -1,5 +1,6 @@
 import argparse
 from .sim_config import SimConfig, EnvironmentConfig, PopulationConfig, IndividualConfig, ProfilerConfig
+from.scenarios import SCENARIOS
 
 ind = IndividualConfig()
 pop = PopulationConfig()
@@ -60,6 +61,8 @@ def parse_args() -> tuple[SimConfig, ProfilerConfig]:
 
     parser.add_argument("--view", action="store_true", default=prof.view)
 
+    parser.add_argument("--scenario", type=str, choices=list(SCENARIOS.keys()), default=None)
+
     args = parser.parse_args()
 
     sim_config = SimConfig(
@@ -115,6 +118,9 @@ def parse_args() -> tuple[SimConfig, ProfilerConfig]:
 
         view=args.view
     )
+
+    if args.scenario:
+        sim_config = SCENARIOS[args.scenario](sim_config)
 
     return sim_config, prof_conf
 
