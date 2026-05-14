@@ -249,11 +249,9 @@ class Population:
                 females.remove(p1)
 
                 mask = self.model.rng.random(len(p1.genome)) > 0.5
-                genome = np.where(mask, p1.genome, p2.genome)
-                pre_mutation_genome = genome.copy()
-                genome += self.model.rng.normal(0, self.config.mutation_std, size=len(genome))
-                genome = np.clip(genome, 0.0, 1.0)
-                mutation_deltas = genome - pre_mutation_genome
+                pre_mutation_genome = np.where(mask, p1.genome, p2.genome)
+
+                genome, mutation_deltas = self.model.mutation_strategy.mutate(pre_mutation_genome, p1, p2, self.model)
                 child = Individual.from_parents(
                     model=self.model,
                     p1=p1,

@@ -19,7 +19,7 @@ from config.cli import parse_args
 from profiling.profiler import run_profile
 
 
-def main() -> None:
+def main():
     _, profiler_config = parse_args()
     run_profile(profiler_config, PROJECT_ROOT)
 

@@ -69,9 +69,11 @@ class SimConfig:
     population: PopulationConfig = field(default_factory=PopulationConfig)
     individual: IndividualConfig = field(default_factory=IndividualConfig)
     n_steps: int = 600
+    retrain_steps: int = 50
     seed: int = 42
     output_path: str = "data/training_samples.json"
     steps_info: int = 5
+    shift_strength: float = 0.7
     model_info: bool = False
     population_info: bool = False
     individual_info: bool = False
