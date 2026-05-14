@@ -1,3 +1,5 @@
+"""Tests for neural/advisor.py."""
+
 import numpy as np
 import pytest
 
