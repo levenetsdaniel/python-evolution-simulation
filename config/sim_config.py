@@ -55,6 +55,9 @@ class FitnessConfig:
     metabolic_rate_efficiency_penalty: float = 0.5
     resilience_efficiency_penalty: float = 0.2
     aggression_metabolic_penalty: float = 0.1
+    speed_metabolic_ratio: float = 2.0
+    size_metabolic_ratio: float = 1.5
+    proportion_penalty: float = 1.0
     score_floor: float = 0.05
 
 

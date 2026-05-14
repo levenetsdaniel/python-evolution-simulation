@@ -45,12 +45,12 @@ class Population:
     @property
     def count_females(self) -> int:
         """Return number of female individuals in the population."""
-        return len([a for a in self.model.agents if a.gender == Gender.FEMALE])
+        return len([a for a in self.model.agents if a.is_alive and a.gender == Gender.FEMALE])
 
     @property
     def count_males(self) -> int:
         """Return number of male individuals in the population."""
-        return len([a for a in self.model.agents if a.gender == Gender.MALE])
+        return len([a for a in self.model.agents if a.is_alive and a.gender == Gender.MALE])
 
     @property
     def actual_pop_size(self) -> int:
@@ -124,6 +124,10 @@ class Population:
         for agent in dead:
             agent.remove()
 
+    def remove_food(self):
+        for a in self.model.agents:
+            a.food_eaten = 0
+
     def _death_prob(self, loser: Individual, power_diff: float):
         """
         Determine an individual death probability after competition.
@@ -159,8 +163,12 @@ class Population:
             v_power = victim["size"] + victim["aggressiveness"]
             total = a_power + v_power
 
-            win_prob = a_power / total
-            power_diff = (a_power - v_power) / total
+            if total == 0:
+                win_prob = 0.5
+                power_diff = 0.0
+            else:
+                win_prob = a_power / total
+                power_diff = (a_power - v_power) / total
 
             if self.model.rng.random() < win_prob:
                 steal_coef = np.clip(0.5 + 0.5 * power_diff, 0.1, 0.9)
@@ -217,10 +225,10 @@ class Population:
         """
 
         females = list(a for a in self.model.agents if
-                       a.fitness is not None and a.gender == Gender.FEMALE and a.age >= self.config.min_reproduction_age)
+                       a.is_alive and a.fitness is not None and a.gender == Gender.FEMALE and a.age >= self.config.min_reproduction_age)
 
         males = list(a for a in self.model.agents if
-                     a.fitness is not None and a.gender == Gender.MALE and a.age >= self.config.min_reproduction_age)
+                     a.is_alive and a.fitness is not None and a.gender == Gender.MALE and a.age >= self.config.min_reproduction_age)
 
         n_offspring = max(2, int(len(females) * self.avg_satiation * self.config.reproduction_rate))
         for _ in range(n_offspring):

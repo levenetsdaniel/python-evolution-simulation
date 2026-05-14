@@ -41,6 +41,7 @@ class Environment:
             "food_availability": self.config.food_availability,
             "hazard_level": self.config.hazard_level_start,
         }
+        self.current_food = self.current_params["food_availability"]
         self.prev_params = self.current_params.copy()
 
     def food_distribution(self):
@@ -54,6 +55,7 @@ class Environment:
         Hungry agents may compete with fed agents for resources.
         """
 
+        self.model.population.remove_food()
         alive = [a for a in self.model.agents if a.is_alive]
 
         raw_weight = np.array([a.genes_map["speed"] * 2.0 / a.food_need for a in alive])
@@ -66,9 +68,9 @@ class Environment:
         hungry = []
 
         for a in ordered:
-            if a.food_need < self.current_params["food_availability"]:
+            if a.food_need < self.current_food:
                 a.food_eaten = a.food_need
-                self.current_params["food_availability"] -= a.food_eaten
+                self.current_food -= a.food_eaten
                 fed.append(a)
             else:
                 hungry.append(a)
@@ -88,6 +90,7 @@ class Environment:
         self.prev_params = self.current_params.copy()
         self.time += 1
 
+        self.current_food = self.current_params["food_availability"]
         self.current_params["temperature"] += self.config.temp_step
         self.current_params["optimum_temperature"] += self.config.optimum_temp_step
         if self.current_params["temperature"] >= self.config.max_temperature:
@@ -96,6 +99,6 @@ class Environment:
 
         self.current_params["hazard_level"] += self.config.hazard_step
 
-        self.current_params["food_availability"] = self.config.food_availability
+
 
         self.food_distribution()
