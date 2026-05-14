@@ -5,7 +5,7 @@ config = FitnessConfig()
 env_config = EnvironmentConfig()
 
 
-def _temp_score(heat_res: float, cold_res: float, temp: float, optimum: float) -> float:
+def _temp_score(heat_res: float, cold_res: float, temp: float) -> float:
     """
     Calculates the temperature score given an agent's heat resistance, cold resistance and environment's current temperature.
 
@@ -13,7 +13,6 @@ def _temp_score(heat_res: float, cold_res: float, temp: float, optimum: float) -
         heat_res: Individual resistance to high temperatures.
         cold_res: Individual resistance to low temperatures.
         temp: Current environmental temperature.
-        optimum: Target (optimal) normalized temperature for fitness peak.
 
     Returns:
         A value in the range [score_floor, 1.0] representing temperature fitness.
@@ -21,15 +20,12 @@ def _temp_score(heat_res: float, cold_res: float, temp: float, optimum: float) -
 
     temp_norm = (temp - env_config.min_temperature) / (env_config.max_temperature - env_config.min_temperature)
     delta = temp_norm - config.temp_20_norm
-    temp_intensity = abs(delta / config.temp_20_norm)
-    if delta >= 0:
-        temp_res = 1 - temp_intensity * (1 - heat_res) * cold_res
-    else:
-        temp_res = 1 - temp_intensity * (1 - cold_res) * heat_res
+    adaptation = heat_res if delta >= 0 else cold_res
 
-    temp_score = np.exp(- ((temp_res - optimum) ** 2) / config.temp_score_sharpness)
+    pressure = abs(delta) * (1.0 - adaptation)
+    score = np.exp(-pressure ** 2 / config.temp_score_sharpness)
 
-    return np.clip(temp_score, config.score_floor, 1.0)
+    return float(np.clip(score, config.score_floor, 1.0))
 
 
 def _hazard_score(resilience: float, hazard: float) -> float:
@@ -113,8 +109,7 @@ def fitness(ind_params: dict[str, float], env_params: dict[str, float]) -> float
         A scalar fitness score in the range [score_floor, 1.0].
     """
 
-    temp_score = _temp_score(ind_params["heat_resistance"], ind_params["cold_resistance"], env_params["temperature"],
-                             env_params["optimum_temperature"])
+    temp_score = _temp_score(ind_params["heat_resistance"], ind_params["cold_resistance"], env_params["temperature"])
 
     energy_score = _energy_score(ind_params["satiation"], ind_params["resilience"], ind_params["metabolic_rate"],
                                  ind_params["aggressiveness"])

@@ -6,12 +6,10 @@ class EnvironmentConfig:
     """Parameters controlling the environment."""
 
     food_availability: float = 10000.0
+    food_step: float = 0.0
     temp_start: float = 20.0
     temp_step: float = 0.05
     temp_reset: float = -5.0
-    optimum_temp_start: float = 0.625
-    optimum_temp_step: float = 0.00125
-    optimum_temp_reset: float = 0.1
     hazard_level_start: float = 0.1
     hazard_step: float = 0.001
     min_temperature: float = -30.0

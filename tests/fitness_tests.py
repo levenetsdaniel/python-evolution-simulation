@@ -19,39 +19,38 @@ def _comfort_temp() -> float:
 class TestTempScore:
     """Temperature adaptation score."""
 
-    def test_perfect_score_when_temp_res_equals_optimum(self):
-        s = _temp_score(0.5, 0.5, _comfort_temp(), optimum=1.0)
+    def test_perfect_score_at_comfort_temp(self):
+        s = _temp_score(0.5, 0.5, _comfort_temp())
         assert s == pytest.approx(1.0)
 
     def test_at_comfort_temp_score_is_independent_of_genes(self):
         comfort = _comfort_temp()
         scores = [
-            _temp_score(0.0, 0.0, comfort, optimum=0.5),
-            _temp_score(1.0, 1.0, comfort, optimum=0.5),
-            _temp_score(0.3, 0.7, comfort, optimum=0.5),
-            _temp_score(0.9, 0.1, comfort, optimum=0.5),
+            _temp_score(0.0, 0.0, comfort),
+            _temp_score(1.0, 1.0, comfort),
+            _temp_score(0.3, 0.7, comfort),
+            _temp_score(0.9, 0.1, comfort),
         ]
         assert all(s == pytest.approx(scores[0]) for s in scores)
 
     def test_heat_resistance_helps_in_heat(self):
         hot = ECFG.max_temperature - 1.0
-        good = _temp_score(heat_res=1.0, cold_res=0.5, temp=hot, optimum=1.0)
-        bad = _temp_score(heat_res=0.0, cold_res=0.5, temp=hot, optimum=1.0)
+        good = _temp_score(heat_res=1.0, cold_res=0.5, temp=hot)
+        bad = _temp_score(heat_res=0.0, cold_res=0.5, temp=hot)
         assert good > bad
 
     def test_cold_resistance_helps_in_cold(self):
         cold = ECFG.min_temperature + 1.0
-        good = _temp_score(heat_res=0.5, cold_res=1.0, temp=cold, optimum=1.0)
-        bad = _temp_score(heat_res=0.5, cold_res=0.0, temp=cold, optimum=1.0)
+        good = _temp_score(heat_res=0.5, cold_res=1.0, temp=cold)
+        bad = _temp_score(heat_res=0.5, cold_res=0.0, temp=cold)
         assert good > bad
 
     def test_full_grid_within_bounds(self):
         for heat in np.linspace(0.0, 1.0, 5):
             for cold in np.linspace(0.0, 1.0, 5):
                 for temp in np.linspace(ECFG.min_temperature, ECFG.max_temperature, 7):
-                    for opt in np.linspace(0.0, 1.0, 5):
-                        s = _temp_score(heat, cold, temp, opt)
-                        assert FLOOR - 1e-9 <= s <= 1.0 + 1e-9
+                    s = _temp_score(heat, cold, temp)
+                    assert FLOOR - 1e-9 <= s <= 1.0 + 1e-9
 
 
 class TestHazardScore:
@@ -158,7 +157,6 @@ def _make_ind(**params) -> dict:
 def _make_env(**params) -> dict:
     base = dict(
         temperature=_comfort_temp(),
-        optimum_temperature=1.0,
         food_availability=10000.0,
         hazard_level=0.0,
     )
@@ -201,14 +199,14 @@ class TestProportionScore:
 
 
 class TestFitness:
-    """Composite fitness = temp_score * energy_score * hazard_score."""
+    """Composite fitness = temp_score * energy_score * hazard_score * proportion_score."""
 
     def test_equals_product_of_components(self):
         ind = _make_ind()
         env = _make_env()
         expected = (
                 _temp_score(ind["heat_resistance"], ind["cold_resistance"],
-                            env["temperature"], env["optimum_temperature"])
+                            env["temperature"])
                 * _energy_score(ind["satiation"], ind["resilience"],
                                 ind["metabolic_rate"], ind["aggressiveness"])
                 * _hazard_score(ind["resilience"], env["hazard_level"])
@@ -241,7 +239,6 @@ class TestFitness:
             )
             env = _make_env(
                 temperature=float(rng.uniform(ECFG.min_temperature, ECFG.max_temperature)),
-                optimum_temperature=float(rng.random()),
                 hazard_level=float(rng.uniform(0.0, 2.0)),
             )
             f = fitness(ind, env)

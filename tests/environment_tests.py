@@ -49,7 +49,6 @@ def make_ind(model, *, genome=None, food_eaten=0, alive=True):
 def test_init_sets_params_from_config_and_independent_prev_copy():
     cfg = EnvironmentConfig(
         temp_start=15.0,
-        optimum_temp_start=0.7,
         food_availability=5000.0,
         hazard_level_start=0.2,
     )
@@ -58,7 +57,6 @@ def test_init_sets_params_from_config_and_independent_prev_copy():
     assert env.time == 0
     assert env.current_params == {
         "temperature": 15.0,
-        "optimum_temperature": 0.7,
         "food_availability": 5000.0,
         "hazard_level": 0.2,
     }
@@ -68,7 +66,6 @@ def test_init_sets_params_from_config_and_independent_prev_copy():
 def test_step_advances_params_and_snapshots_prev():
     cfg = EnvironmentConfig(
         temp_start=20.0, temp_step=0.05,
-        optimum_temp_start=0.5, optimum_temp_step=0.001,
         hazard_level_start=0.1, hazard_step=0.01,
         food_availability=10000.0,
     )
@@ -80,19 +77,16 @@ def test_step_advances_params_and_snapshots_prev():
 
     assert env.time == 1
     assert env.current_params["temperature"] == pytest.approx(20.05)
-    assert env.current_params["optimum_temperature"] == pytest.approx(0.501)
     assert env.current_params["hazard_level"] == pytest.approx(0.11)
 
     assert env.prev_params["temperature"] == pytest.approx(20.0)
-    assert env.prev_params["optimum_temperature"] == pytest.approx(0.5)
     assert env.prev_params["hazard_level"] == pytest.approx(0.1)
 
 
-def test_step_resets_temperature_and_optimum_when_max_reached():
+def test_step_resets_temperature_when_max_reached():
     cfg = EnvironmentConfig(
         temp_start=49.99, temp_step=0.05,
         max_temperature=50.0, temp_reset=-5.0,
-        optimum_temp_reset=0.1,
         food_availability=10000.0,
     )
     m = StubModel()
@@ -102,7 +96,6 @@ def test_step_resets_temperature_and_optimum_when_max_reached():
     env.step()
 
     assert env.current_params["temperature"] == cfg.temp_reset
-    assert env.current_params["optimum_temperature"] == cfg.optimum_temp_reset
 
 def test_food_distribution_resets_food_eaten_at_start():
     """All alive agents start the round with food_eaten=0, regardless of
