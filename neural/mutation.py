@@ -53,6 +53,7 @@ def _build_features(
 def _fallback_random_mutate(
     pre_mutation_genome: np.ndarray,
     mutation_std: float = 0.12,
+    rng=None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Apply a baseline-style random mutation when the advisor is not trained.
@@ -62,7 +63,10 @@ def _fallback_random_mutate(
     """
     pre = np.asarray(pre_mutation_genome, dtype=np.float32)
 
-    noise = np.random.normal(
+    if rng is None:
+        rng = np.random.default_rng()
+
+    noise = rng.normal(
         loc=0.0,
         scale=mutation_std,
         size=pre.shape,
@@ -83,6 +87,8 @@ def neural_mutate(
     pop_mean_fitness: float,
     parent_mean_fitness: float,
     shift_strength: float = 0.3,
+    rng=None,
+    mutation_std: float = 0.12,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Predict a target genome with the advisor and move the current genome
@@ -96,7 +102,11 @@ def neural_mutate(
     pre = np.asarray(pre_mutation_genome, dtype=np.float32)
 
     if not advisor.is_trained:
-        return _fallback_random_mutate(pre)
+        return _fallback_random_mutate(
+            pre,
+            mutation_std=mutation_std,
+            rng=rng,
+        )
 
     features = _build_features(
         pre_mutation_genome=pre,
@@ -116,7 +126,7 @@ def neural_mutate(
         )
 
     mutated = pre + shift_strength * (target - pre)
-    mutated = np.clip(mutated, 0.0, 1.0)
+    mutated = np.clip(mutated, 0.0, 1.0).astype(np.float32)
     deltas = mutated - pre
 
     return mutated, deltas
