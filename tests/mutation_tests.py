@@ -69,12 +69,10 @@ def _mutate(advisor, pre, shift=0.5, **mutate_kwargs):
 
 
 def test_features_length():
-    """_build_features() must return a vector of the expected length."""
     assert _features().shape == (N_FEATURES,)
 
 
 def test_features_accept_dict_env():
-    """_build_features() must accept environment values as dictionaries."""
     out = _features(
         env_params={
             "temperature": 20.0,
@@ -92,12 +90,10 @@ def test_features_accept_dict_env():
 
 
 def test_features_dtype_float32():
-    """_build_features() must return float32 features."""
     assert _features().dtype == np.float32
 
 
 def test_shift_math(advisor_factory):
-    """neural_mutate() must move the genome toward the predicted target."""
     pre = np.full(N_GENES, 0.4, dtype=np.float32)
     advisor = advisor_factory(np.full(N_GENES, 0.8))
 
@@ -108,7 +104,6 @@ def test_shift_math(advisor_factory):
 
 
 def test_zero_shift_keeps_genome(advisor_factory):
-    """shift_strength=0 must keep the genome unchanged."""
     pre = np.full(N_GENES, 0.3, dtype=np.float32)
     advisor = advisor_factory(np.full(N_GENES, 0.9))
 
@@ -119,7 +114,6 @@ def test_zero_shift_keeps_genome(advisor_factory):
 
 
 def test_full_shift_reaches_target(advisor_factory):
-    """shift_strength=1 must move the genome fully to the target."""
     pre = np.full(N_GENES, 0.3, dtype=np.float32)
     advisor = advisor_factory(np.full(N_GENES, 0.8))
 
@@ -129,7 +123,6 @@ def test_full_shift_reaches_target(advisor_factory):
 
 
 def test_target_clipped_upper_bound(advisor_factory):
-    """Predicted targets above 1.0 must be clipped to the valid range."""
     pre = np.full(N_GENES, 0.5, dtype=np.float32)
     advisor = advisor_factory(np.full(N_GENES, 1.5))
 
@@ -141,7 +134,6 @@ def test_target_clipped_upper_bound(advisor_factory):
 
 
 def test_target_clipped_lower_bound(advisor_factory):
-    """Predicted targets below 0.0 must be clipped to the valid range."""
     pre = np.full(N_GENES, 0.5, dtype=np.float32)
     advisor = advisor_factory(np.full(N_GENES, -0.5))
 
@@ -153,7 +145,6 @@ def test_target_clipped_lower_bound(advisor_factory):
 
 
 def test_deltas_match(advisor_factory):
-    """Returned deltas must equal mutated genome minus original genome."""
     pre = np.full(N_GENES, 0.4, dtype=np.float32)
     advisor = advisor_factory(np.full(N_GENES, 0.8))
 
@@ -163,7 +154,6 @@ def test_deltas_match(advisor_factory):
 
 
 def test_wrong_target_shape(advisor_factory):
-    """neural_mutate() must reject advisor predictions with wrong shape."""
     pre = np.full(N_GENES, 0.5, dtype=np.float32)
     advisor = advisor_factory(np.full(N_GENES + 1, 0.8))
 
@@ -172,7 +162,6 @@ def test_wrong_target_shape(advisor_factory):
 
 
 def test_fallback_changes_genome(untrained_advisor):
-    """Fallback mutation must change the genome when the advisor is untrained."""
     pre = np.full(N_GENES, 0.5, dtype=np.float32)
 
     mutated, _ = _mutate(

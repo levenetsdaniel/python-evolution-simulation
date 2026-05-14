@@ -39,7 +39,6 @@ def _fill_buffer(buf, n=15, *, pre=None, deltas=None):
 
 
 def test_empty_buffer_raises():
-    """train_advisor() must reject an empty TrainingBuffer."""
     advisor = CatBoostAdvisor(iterations=10, verbose=False)
 
     with pytest.raises(ValueError):
@@ -47,7 +46,6 @@ def test_empty_buffer_raises():
 
 
 def test_returns_three_arrays():
-    """train_advisor() must return feature, target, and weight arrays."""
     buf = TrainingBuffer()
     _fill_buffer(buf)
 
@@ -59,7 +57,6 @@ def test_returns_three_arrays():
 
 
 def test_shapes_match():
-    """Returned arrays must have shapes matching the buffered samples."""
     buf = TrainingBuffer()
     _fill_buffer(buf, n=15)
 
@@ -71,7 +68,6 @@ def test_shapes_match():
 
 
 def test_marks_trained():
-    """train_advisor() must mark the advisor as trained."""
     buf = TrainingBuffer()
     _fill_buffer(buf)
 
@@ -82,7 +78,6 @@ def test_marks_trained():
 
 
 def test_target_equals_pre_plus_deltas():
-    """Targets must be computed as pre-mutation genome plus mutation deltas."""
     buf = TrainingBuffer()
     _fill_buffer(
         buf,
@@ -97,7 +92,6 @@ def test_target_equals_pre_plus_deltas():
 
 
 def test_target_clipped_to_unit_interval():
-    """Targets must be clipped to the valid genome range [0.0, 1.0]."""
     buf = TrainingBuffer()
     _fill_buffer(
         buf,
@@ -114,7 +108,6 @@ def test_target_clipped_to_unit_interval():
 
 
 def test_weights_sum_to_one():
-    """Returned sample weights must be normalized to sum to one."""
     buf = TrainingBuffer()
     _fill_buffer(buf, n=12)
 

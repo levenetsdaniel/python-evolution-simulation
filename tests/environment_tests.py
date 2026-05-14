@@ -36,6 +36,7 @@ class StubModel(mesa.Model):
 
 
 def make_ind(model, *, genome=None, food_eaten=0, alive=True):
+    """Creates agent"""
     ind = Individual(
         model=model,
         genome=genome if genome is not None else np.full(N, 0.5),
@@ -98,8 +99,6 @@ def test_step_resets_temperature_when_max_reached():
     assert env.current_params["temperature"] == cfg.temp_reset
 
 def test_food_distribution_resets_food_eaten_at_start():
-    """All alive agents start the round with food_eaten=0, regardless of
-    carryover from previous rounds (e.g. food stolen via compete())."""
     m = StubModel()
     env = Environment(m, config=EnvironmentConfig(food_availability=0.0))
 
