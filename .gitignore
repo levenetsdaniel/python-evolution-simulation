@@ -9,3 +9,4 @@ models/*.cbm
 graphics/
 reports/
 outputs/
+dashboard_output/
