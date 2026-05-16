@@ -4,8 +4,8 @@ from pathlib import Path
 
 from config.sim_config import SimConfig
 from core.engine import Engine
-from vis.plots import build_animated_scatter, build_comparison_table
-from vis.snapshots import run_with_snapshots
+from .plots import build_animated_scatter, build_comparison_table
+from .snapshots import run_with_snapshots
 
 
 def build_dashboard(config: SimConfig, out_dir: str | Path = "dashboard_output") -> Path:
@@ -21,10 +21,14 @@ def build_dashboard(config: SimConfig, out_dir: str | Path = "dashboard_output")
     baseline_hist = history[history["branch"] == "baseline"].reset_index(drop=True)
     neural_hist = history[history["branch"] == "neural"].reset_index(drop=True)
 
+    scatter_title = f"Animated scatter ({config.x_trait} × {config.y_trait})"
+
     figures = {
-        "Animated scatter (heat × cold)": build_animated_scatter(
+        scatter_title: build_animated_scatter(
             baseline_snaps,
             neural_snaps,
+            x_trait=config.x_trait,
+            y_trait=config.y_trait,
         ),
         "Comparison table": build_comparison_table(
             baseline_hist,

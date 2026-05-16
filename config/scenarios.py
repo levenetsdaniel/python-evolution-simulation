@@ -9,7 +9,7 @@ Using:
     config = SCENARIOS["harsh_seasons"]()
 """
 
-from .sim_config import SimConfig, EnvironmentConfig
+from .sim_config import EnvironmentConfig
 
 SCENARIOS: dict[str, EnvironmentConfig] = {
     "default": EnvironmentConfig(),
@@ -29,7 +29,7 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     ),
     "ice_age": EnvironmentConfig(
         food_availability=7000.0,
-        food_step=-10,
+        food_step=-10.0,
         temp_start=30.0,
         temp_step=-0.08,
         hazard_level_start=0.1,

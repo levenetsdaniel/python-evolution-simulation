@@ -76,6 +76,9 @@ class SimConfig:
     population_info: bool = False
     individual_info: bool = False
     record: bool = False
+    x_trait: str = "heat_resistance"
+    y_trait: str = "cold_resistance"
+    view: bool = False
     debug: bool = False
 
 @dataclass

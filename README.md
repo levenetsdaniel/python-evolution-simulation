@@ -35,14 +35,17 @@ evosim/
 │   └── mutation.py          # neural_mutate: сдвиг генома к предсказанному вектору
 ├── vis/
 │   ├── history.py           # пошаговый сбор истории → DataFrame
-│   ├── plots.py             # Plotly-графики
-│   └── vis_demo.py          # демо визуализации (одиночный прогон)
+│   ├── plots.py             # Plotly-графики и компоненты дашборда
+│   ├── snapshots.py         # per-step снимки геномов для анимации
+│   ├── dashboard.py         # сборка сравнительного HTML-дашборда baseline vs neural
+│   └── vis_demo.py          # демо базовой визуализации (одиночный прогон)
 ├── profiling/
 │   ├── profiler.py          # cProfile + сохранение артефактов
 │   ├── stats.py             # фильтрация project-only функций, текстовая сводка
 │   ├── report.py            # рендер HTML-отчёта
 │   └── report_template.html
-├── tests/                   # pytest: fitness / individual / population / environment / training_buffer
+├── tests/                   # pytest: fitness / individual / population / environment /
+│                            # training_buffer / advisor / trainer / mutation
 ├── reports/                 # артефакты профилирования
 ├── config/
 │   ├── sim_config.py        # dataclass-схемы (Sim / Environment / Population / Individual / Fitness / Profiler)
@@ -53,7 +56,6 @@ evosim/
 ├── main.py                  # baseline + neural-guided через Engine
 ├── synthetic_run.py         # одиночный Model: печать статистики, сбор обучающих примеров
 ├── profile_run.py           # точка входа профайлера
-├── advisor_demo.py          # демо обучения и применения советчика
 ├── tests_run.py             # запуск всего тестового набора
 ├── requirements.txt
 └── README.md
@@ -96,7 +98,7 @@ evosim/
 git clone https://github.com/levenetsdaniel/python-evolution-simulation
 cd evosim
 
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 
 pip install -r requirements.txt
@@ -106,12 +108,12 @@ pip install -r requirements.txt
 
 | Скрипт | Что делает |
 |---|---|
-| `python main.py` | Полный прогон `Engine`: предобучает советчика на baseline-буфере и запускает обе ветви (baseline + neural-guided) синхронно |
-| `python synthetic_run.py` | Одиночный прогон `Model` (только baseline-мутации) с возможностью печати статистики и сохранения обучающего буфера |
-| `python profile_run.py` | Прогон симуляции под `cProfile` |
-| `python vis/vis_demo.py` | Сохраняет базовый набор Plotly-графиков по одиночному прогону |
-| `python advisor_demo.py` | Мини-демо: обучение советчика, save/load, проверка корректности `neural_mutate` |
-| `python tests_run.py` | Запуск всего тестового набора |
+| `python3 main.py` | Полный прогон `Engine`: предобучает советчика на baseline-буфере и запускает обе ветви (baseline + neural-guided) синхронно. С `view=true` вместо прогона собирает сравнительный дашборд (см. ниже). |
+| `python3 synthetic_run.py` | Одиночный прогон `Model` (только baseline-мутации) с возможностью печати статистики и сохранения обучающего буфера |
+| `python3 profile_run.py` | Прогон симуляции под `cProfile` |
+| `python3 vis/vis_demo.py` | Сохраняет базовый набор Plotly-графиков по одиночному прогону |
+| `python3 vis/dashboard.py` | Прямой сбор дашборда с дефолтным `SimConfig` (без CLI-override) |
+| `python3 tests_run.py` | Запуск всего тестового набора |
 
 ---
 
@@ -120,10 +122,10 @@ pip install -r requirements.txt
 Все параметры описаны как dataclass-схемы в `config/sim_config.py` и зарегистрированы в Hydra ConfigStore (`config/registry.py`). Дефолтные значения берутся из dataclass; YAML-файлы (`config/sim_config.yaml`, `config/profile_config.yaml`) задают стартовый профиль; всё остальное переопределяется из CLI в стиле Hydra:
 
 ```bash
-python main.py n_steps=200 seed=7
-python main.py population.initial_size=300 environment.temp_start=10
-python main.py environment=warming        # выбор сценария (см. ниже)
-python main.py --help                     # полный список параметров
+python3 main.py n_steps=200 seed=7
+python3 main.py population.initial_size=300 environment.temp_start=10
+python3 main.py environment=warming        # выбор сценария (см. ниже)
+python3 main.py --help                     # полный список параметров
 ```
 
 ### `SimConfig` (корень)
@@ -136,6 +138,9 @@ python main.py --help                     # полный список парам
 | `shift_strength` | float | `0.7` | Сила сдвига генома к предсказанию советчика в `NeuralMutation` |
 | `output_path` | str | `data/training_samples.json` | Путь для сохранения обучающего буфера (`synthetic_run.py` при `record=true`) |
 | `record` | bool | `false` | Записывать буфер обучающих примеров на диск |
+| `view` | bool | `false` | В `main.py` — собрать и сохранить дашборд вместо обычного прогона `Engine`. В `profile_run.py` — автоматически открыть HTML-отчёт по профилированию. |
+| `x_trait` | str | `heat_resistance` | Ось X для animated scatter в дашборде (любое имя из `population.genome_labels`) |
+| `y_trait` | str | `cold_resistance` | Ось Y для animated scatter в дашборде |
 | `debug` | bool | `false` | Печатать подробную статистику по каждому шагу |
 | `model_info` | bool | `false` | Сводка по модели (`synthetic_run.py`) |
 | `steps_info` | int | `5` | Сколько последних шагов показать в `model_info` |
@@ -158,14 +163,14 @@ python main.py --help                     # полный список парам
 
 ### `population` (`PopulationConfig`)
 
-| Ключ | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `initial_size` | int | `100` | Начальный размер популяции |
-| `mutation_std` | float | `0.12` | Стандартное отклонение baseline-мутации |
-| `reproduction_rate` | float | `0.4` | Коэффициент плодовитости |
-| `min_reproduction_age` | int | `2` | Минимальный возраст для размножения |
+| Ключ | Тип | По умолчанию | Описание                                              |
+|---|---|---|-------------------------------------------------------|
+| `initial_size` | int | `100` | Начальный размер популяции                            |
+| `mutation_std` | float | `0.12` | Стандартное отклонение baseline-мутации               |
+| `reproduction_rate` | float | `0.4` | Коэффициент плодовитости                              |
+| `min_reproduction_age` | int | `2` | Минимальный возраст для размножения                   |
 | `wound_base` | float | `0.4` | Базовая вероятность смерти проигравшего в конкуренции |
-| `genome_labels` | list[str] | 7 признаков | Имена осей генома |
+| `genome_labels` | list[str] | 7 признаков | Названия генов                                        |
 
 ### `individual` (`IndividualConfig`)
 
@@ -182,17 +187,17 @@ python main.py --help                     # полный список парам
 
 ### `fitness` (`FitnessConfig`)
 
-| Ключ | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `temp_20_norm` | float | `0.625` | Нормированная «комфортная» температура |
-| `temp_score_sharpness` | float | `0.5` | Жёсткость температурного штрафа |
-| `metabolic_rate_efficiency_penalty` | float | `0.5` | Штраф эффективности от метаболизма |
-| `resilience_efficiency_penalty` | float | `0.2` | Штраф эффективности от resilience |
-| `aggression_metabolic_penalty` | float | `0.1` | Штраф за избыток агрессии над метаболизмом |
-| `speed_metabolic_ratio` | float | `2.0` | Допустимое отношение `speed / metabolic_rate` |
-| `size_metabolic_ratio` | float | `1.5` | Допустимое отношение `size / metabolic_rate` |
-| `proportion_penalty` | float | `1.0` | Штраф за нарушение пропорций |
-| `score_floor` | float | `0.05` | Минимальное значение любого компонента фитнеса |
+| Ключ | Тип | По умолчанию | Описание                                       |
+|---|---|---|------------------------------------------------|
+| `temp_20_norm` | float | `0.625` | Нормированная «комфортная» температура         |
+| `temp_score_sharpness` | float | `0.5` | Жёсткость температурного штрафа                |
+| `metabolic_rate_efficiency_penalty` | float | `0.5` | Штраф эффективности от метаболизма             |
+| `resilience_efficiency_penalty` | float | `0.2` | Штраф эффективности от resilience              |
+| `aggression_metabolic_penalty` | float | `0.1` | Штраф за избыток агрессии над метаболизмом     |
+| `speed_metabolic_ratio` | float | `2.0` | Допустимое отношение `speed / metabolic_rate`  |
+| `size_metabolic_ratio` | float | `1.5` | Допустимое отношение `size / metabolic_rate`   |
+| `proportion_penalty` | float | `1.0` | Штраф за нарушение пропорций                   |
+| `score_floor` | float | `0.05` | Минимальное значение любого компонента fitness |
 
 ---
 
@@ -201,8 +206,8 @@ python main.py --help                     # полный список парам
 Готовые пресеты `EnvironmentConfig` определены в `config/scenarios.py` и подключаются через группу `environment` в CLI:
 
 ```bash
-python main.py environment=warming
-python main.py environment=famine population.initial_size=200 n_steps=1000
+python3 main.py environment=warming
+python3 main.py environment=famine population.initial_size=200 n_steps=1000
 ```
 
 | Имя | Что моделирует | Что нагружает |
@@ -223,43 +228,72 @@ python main.py environment=famine population.initial_size=200 n_steps=1000
 Полный прогон `Engine`:
 
 ```bash
-python main.py
+python3 main.py
 ```
 
 Увеличенная сила нейросдвига и фиксированный сид:
 
 ```bash
-python main.py shift_strength=0.9 seed=7
+python3 main.py shift_strength=0.9 seed=7
 ```
 
 Сценарий + переопределение популяции:
 
 ```bash
-python main.py environment=harsh_seasons population.initial_size=200 n_steps=1200
+python3 main.py environment=harsh_seasons population.initial_size=200 n_steps=1200
 ```
 
 Одиночный baseline-прогон с печатью метрик модели:
 
 ```bash
-python synthetic_run.py n_steps=200 model_info=true
+python3 synthetic_run.py n_steps=200 model_info=true
 ```
 
 Сбор обучающей выборки для нейросоветчика:
 
 ```bash
-python synthetic_run.py n_steps=1000 record=true output_path=data/run_01.json
+python3 synthetic_run.py n_steps=1000 record=true output_path=data/run_01.json
 ```
 
 Полный дебаг-прогон с пошаговыми логами:
 
 ```bash
-python synthetic_run.py n_steps=50 debug=true population_info=true individual_info=true
+python3 synthetic_run.py n_steps=50 debug=true population_info=true individual_info=true
 ```
 
 Базовая визуализация (Plotly-графики в `vis/graphics/`):
 
 ```bash
-python vis/vis_demo.py
+python3 vis/vis_demo.py
+```
+
+---
+
+## Сравнительный дашборд
+
+```bash
+python3 main.py view=true
+python3 main.py view=true environment=warming seed=7
+python3 main.py view=true environment=harsh_seasons population.initial_size=200 n_steps=1200
+```
+### Что внутри
+
+- **Animated scatter (heat × cold).** Каждая точка — особь на двумерной проекции пространства признаков (по умолчанию `heat_resistance × cold_resistance`); цвет точки кодирует fitness (синяя гамма — baseline, красная — neural-guided). Внизу — кнопки play/pause и слайдер по поколениям для покадрового просмотра.
+- **Comparison table.** Итоги двух ветвей по четырём метрикам:
+  - финальная численность,
+  - средний fitness в хвостовом окне (последние 50 шагов),
+  - скорость адаптации — slope линейной аппроксимации `AvgFitness(generation)`,
+  - сколько шагов реально прожили (до экстинкции либо до `n_steps`).
+
+  В каждой строке лучшее значение подсвечивается зелёным.
+
+### Ось проекции
+
+В animated scatter оси задаются через параметры `x_trait` и `y_trait` в `SimConfig` (по умолчанию — `heat_resistance × cold_resistance`). Любое имя из `population.genome_labels` валидно:
+
+```bash
+python3 main.py view=true x_trait=size y_trait=speed
+python3 main.py view=true environment=warming x_trait=heat_resistance y_trait=metabolic_rate
 ```
 
 ---
@@ -274,16 +308,16 @@ python vis/vis_demo.py
 | `cprofile_summary.txt` | Текстовая сводка top-N по cumtime + tottime + callers |
 | `profiling_report.html` | HTML-отчёт по коду проекта |
 
-Импорты `mesa` / `numpy` / `pandas` / `scipy` / `catboost` в профилирование не включаются — фильтр в `profiling/stats.py` оставляет только функции из дерева проекта.
+Импорты `mesa` / `numpy` / `pandas` / `scipy` / `catboost` в профилирование не включаются — фильтр в `profiling/stats.py` оставляет только функции из проекта.
 
 ### `ProfilerConfig`
 
 Конфиг профайлера оборачивает `SimConfig` под ключом `simulation_config`. Параметры симуляции переопределяются через этот префикс:
 
 ```bash
-python profile_run.py simulation_config.n_steps=500
-python profile_run.py simulation_config.environment=warming
-python profile_run.py simulation_config.population.initial_size=300 top_n_flame=25
+python3 profile_run.py simulation_config.n_steps=500
+python3 profile_run.py simulation_config.environment=warming
+python3 profile_run.py simulation_config.population.initial_size=300 top_n_flame=25
 ```
 
 | Ключ | Тип | По умолчанию | Описание |
@@ -304,23 +338,23 @@ python profile_run.py simulation_config.population.initial_size=300 top_n_flame=
 Базовый прогон, 200 шагов:
 
 ```bash
-python profile_run.py simulation_config.n_steps=200
+python3 profile_run.py simulation_config.n_steps=200
 ```
 
 С автооткрытием HTML-отчёта:
 
 ```bash
-python profile_run.py simulation_config.n_steps=500 view=true
+python3 profile_run.py simulation_config.n_steps=500 view=true
 ```
 
 Углублённый анализ — больше callers и больше строк во флеймчарте:
 
 ```bash
-python profile_run.py simulation_config.n_steps=500 top_n_callers=20 top_n_flame=25
+python3 profile_run.py simulation_config.n_steps=500 top_n_callers=20 top_n_flame=25
 ```
 
 Профилирование с увеличенным стартовым размером популяции:
 
 ```bash
-python profile_run.py simulation_config.n_steps=1000 simulation_config.population.initial_size=300
+python3 profile_run.py simulation_config.n_steps=1000 simulation_config.population.initial_size=300
 ```

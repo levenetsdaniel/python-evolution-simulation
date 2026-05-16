@@ -13,6 +13,9 @@ model_info: false
 population_info: false
 individual_info: false
 record: false
+x_trait: heat_resistance
+y_trait: cold_resistance
+view: false
 debug: false
 
 hydra:
