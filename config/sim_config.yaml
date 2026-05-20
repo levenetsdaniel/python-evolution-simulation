@@ -1,0 +1,23 @@
+defaults:
+  - sim_schema
+  - environment: default
+  - _self_
+
+n_steps: 600
+retrain_steps: 50
+seed: 42
+shift_strength: 0.7
+output_path: data/training_samples.json
+steps_info: 5
+model_info: false
+population_info: false
+individual_info: false
+record: false
+x_trait: heat_resistance
+y_trait: cold_resistance
+view: false
+debug: false
+
+hydra:
+  job:
+    chdir: false
