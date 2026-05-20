@@ -203,7 +203,7 @@ def build_comparison_table(
             ".3f",
         ),
         (
-            "Скорость адаптации",
+            "Тренд среднего fitness",
             _adaptation_speed(baseline_history),
             _adaptation_speed(neural_history),
             ".5f",
@@ -233,9 +233,10 @@ def build_comparison_table(
         go.Table(
             header=dict(
                 values=["Метрика", "Baseline", "Neural-guided"],
-                fill_color="lightgrey",
+                fill_color="#1e293b",
                 align="left",
-                font=dict(size=14),
+                font=dict(size=14, color="#e5e7eb"),
+                height=32,
             ),
             cells=dict(
                 values=[
@@ -244,21 +245,27 @@ def build_comparison_table(
                     [format(value, fmt) for value, fmt in zip(n_vals, formats)],
                 ],
                 fill_color=[
-                    ["white"] * len(names),
+                    ["#111827"] * len(names),
                     b_colors,
                     n_colors,
                 ],
                 align="left",
-                font=dict(size=12),
-                height=28,
+                font=dict(size=13, color="#e5e7eb"),
+                height=30,
             ),
         )
     )
 
-    fig.update_layout(title="Baseline vs Neural-guided")
+    fig.update_layout(
+        title="Baseline vs Neural-guided",
+        paper_bgcolor="#111827",
+        plot_bgcolor="#111827",
+        font=dict(color="#e5e7eb"),
+        height=330,
+        margin=dict(l=30, r=30, t=70, b=30),
+    )
 
     return fig
-
 
 def _single_environment_history(history_df: pd.DataFrame) -> pd.DataFrame:
     """Return one branch history for environment plots to avoid duplicated lines."""
@@ -458,13 +465,16 @@ def _adaptation_speed(history) -> float:
 
 def _winner_colors(baseline_value: float, neural_value: float) -> tuple[str, str]:
     """Return table cell colors highlighting the better value."""
+    neutral_color = "#111827"
+    winner_color = "#166534"
+
     if np.isclose(baseline_value, neural_value):
-        return "white", "white"
+        return neutral_color, neutral_color
 
     if baseline_value > neural_value:
-        return "lightgreen", "white"
+        return winner_color, neutral_color
 
-    return "white", "lightgreen"
+    return neutral_color, winner_color
 
 
 def _make_scatter(

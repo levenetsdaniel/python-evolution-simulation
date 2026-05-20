@@ -54,13 +54,85 @@ def build_dashboard(config: SimConfig, out_dir: str | Path = "dashboard_output")
 
 def _write_combined_html(figures: dict, path: Path) -> None:
     parts = [
-        '<html><head><meta charset="utf-8"><title>Evolution Dashboard</title></head><body>',
-        '<h1>Эволюция: Baseline vs Neural-guided</h1>',
+        """
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Evolution Dashboard</title>
+            <style>
+                body {
+                    margin: 0;
+                    padding: 32px;
+                    background: #0f172a;
+                    font-family: Arial, sans-serif;
+                }
+
+                h1 {
+                    text-align: center;
+                    font-family: Georgia, "Times New Roman", serif;
+                    font-size: 42px;
+                    font-weight: 400;
+                    color: #e5e7eb;
+                    margin-top: 10px;
+                    margin-bottom: 42px;
+                    letter-spacing: 0.5px;
+                }
+
+                h2 {
+                    text-align: center;
+                    color: #cbd5e1;
+                    font-size: 24px;
+                    font-weight: 500;
+                    margin-top: 38px;
+                    margin-bottom: 18px;
+                }
+
+                .plot-block {
+                    max-width: 1400px;
+                    margin: 0 auto 36px auto;
+                    padding: 18px;
+                    background: #111827;
+                    border: 1px solid #334155;
+                    border-radius: 14px;
+                    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Эволюция: Baseline vs Neural-guided</h1>
+        """
     ]
 
     for name, fig in figures.items():
+        fig.update_layout(
+            paper_bgcolor="#111827",
+            plot_bgcolor="#111827",
+            font=dict(color="#e5e7eb"),
+            legend=dict(
+                bgcolor="rgba(17, 24, 39, 0.8)",
+                bordercolor="#334155",
+                borderwidth=1,
+                font=dict(color="#e5e7eb"),
+            ),
+        )
+
+        fig.update_xaxes(
+            gridcolor="#334155",
+            linecolor="#64748b",
+            tickfont=dict(color="#cbd5e1"),
+            title=dict(font=dict(color="#e5e7eb")),
+        )
+
+        fig.update_yaxes(
+            gridcolor="#334155",
+            linecolor="#64748b",
+            tickfont=dict(color="#cbd5e1"),
+            title=dict(font=dict(color="#e5e7eb")),
+        )
         parts.append(f"<h2>{name}</h2>")
+        parts.append('<div class="plot-block">')
         parts.append(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        parts.append("</div>")
 
     parts.append("</body></html>")
     path.write_text("\n".join(parts), encoding="utf-8")
