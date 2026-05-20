@@ -10,3 +10,5 @@ graphics/
 reports/
 outputs/
 dashboard_output/
+.venv311/
+.pytest_cache/

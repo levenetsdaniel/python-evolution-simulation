@@ -1,4 +1,4 @@
-mesa>=3.5.1
+mesa>=3.3.0
 networkx>=3.0
 numpy>=2.4.0
 pandas>=3.0.0

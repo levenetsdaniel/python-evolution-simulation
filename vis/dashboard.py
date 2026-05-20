@@ -2,9 +2,14 @@
 
 from pathlib import Path
 
-from config.sim_config import SimConfig
+from config.sim_config import EnvironmentEventConfig, SimConfig
 from core.engine import Engine
-from .plots import build_animated_scatter, build_comparison_table
+from .plots import (
+    build_animated_scatter,
+    build_comparison_table,
+    build_environment_events_figure,
+    build_event_timeline,
+)
 from .snapshots import run_with_snapshots
 
 
@@ -30,6 +35,8 @@ def build_dashboard(config: SimConfig, out_dir: str | Path = "dashboard_output")
             x_trait=config.x_trait,
             y_trait=config.y_trait,
         ),
+        "Environment and disasters": build_environment_events_figure(history),
+        "Event timeline": build_event_timeline(history),
         "Comparison table": build_comparison_table(
             baseline_hist,
             neural_hist,
@@ -60,6 +67,28 @@ def _write_combined_html(figures: dict, path: Path) -> None:
 
 
 if __name__ == "__main__":
-    cfg = SimConfig()
+    cfg = SimConfig(
+        environment_events=[
+            EnvironmentEventConfig(
+                event_type="heat_wave",
+                start_step=100,
+                duration=30,
+                temperature_delta=20.0,
+            ),
+            EnvironmentEventConfig(
+                event_type="epidemic",
+                start_step=220,
+                duration=40,
+                hazard_delta=0.4,
+            ),
+            EnvironmentEventConfig(
+                event_type="cold_snap",
+                start_step=350,
+                duration=30,
+                temperature_delta=20.0,
+            ),
+        ]
+    )
+
     path = build_dashboard(cfg)
     print(f"Dashboard saved to {path.resolve()}")

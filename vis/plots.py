@@ -1,9 +1,10 @@
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import numpy as np
+
 
 def _build_group_figure(
     history_df: pd.DataFrame,
@@ -71,7 +72,6 @@ def _build_group_figure(
 def build_all_figures(history_df: pd.DataFrame) -> dict[str, go.Figure]:
     """
     Build all basic visualization figures required for the first iteration.
-
     """
     figures = {
         "temperature_traits": _build_group_figure(
@@ -107,7 +107,9 @@ def build_all_figures(history_df: pd.DataFrame) -> dict[str, go.Figure]:
             right_axis_title="Population size",
         ),
     }
+
     return figures
+
 
 def save_figures(figures: dict[str, go.Figure], output_dir: str | Path = "artifacts") -> None:
     """Save all figures as separate HTML files."""
@@ -116,6 +118,7 @@ def save_figures(figures: dict[str, go.Figure], output_dir: str | Path = "artifa
 
     for name, fig in figures.items():
         fig.write_html(str(output_dir / f"{name}.html"))
+
 
 def build_animated_scatter(
     baseline_snaps: list[dict],
@@ -175,6 +178,7 @@ def build_animated_scatter(
     )
 
     return fig
+
 
 def build_comparison_table(
     baseline_history,
@@ -256,6 +260,163 @@ def build_comparison_table(
     return fig
 
 
+def _single_environment_history(history_df: pd.DataFrame) -> pd.DataFrame:
+    """Return one branch history for environment plots to avoid duplicated lines."""
+    if len(history_df) == 0:
+        return history_df
+
+    if "branch" not in history_df.columns:
+        return history_df
+
+    if "baseline" in set(history_df["branch"]):
+        return history_df[history_df["branch"] == "baseline"].reset_index(drop=True)
+
+    first_branch = history_df["branch"].iloc[0]
+    return history_df[history_df["branch"] == first_branch].reset_index(drop=True)
+
+
+def build_event_timeline(history_df: pd.DataFrame) -> go.Figure:
+    """Build a timeline showing when environment events are active."""
+    required = {"Step", "EventCount", "ActiveEvents"}
+    missing = required - set(history_df.columns)
+
+    if missing:
+        raise ValueError(f"Missing required columns: {sorted(missing)}")
+
+    env_history = _single_environment_history(history_df)
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=env_history["Step"],
+            y=env_history["EventCount"],
+            mode="lines+markers",
+            name="Active events",
+            text=env_history["ActiveEvents"],
+            hovertemplate=(
+                "Step=%{x}<br>"
+                "Event count=%{y}<br>"
+                "Events=%{text}"
+                "<extra></extra>"
+            ),
+        )
+    )
+
+    fig.update_layout(
+        title="Environment Event Timeline",
+        template="plotly_white",
+        hovermode="x unified",
+        height=350,
+    )
+
+    fig.update_xaxes(title_text="Step")
+    fig.update_yaxes(title_text="Active event count")
+
+    return fig
+
+
+def build_environment_events_figure(history_df: pd.DataFrame) -> go.Figure:
+    """Build environment plot comparing base and event-modified parameters."""
+    required = {
+        "Step",
+        "Temperature",
+        "BaseTemperature",
+        "HazardLevel",
+        "BaseHazardLevel",
+        "ActiveEvents",
+    }
+    missing = required - set(history_df.columns)
+
+    if missing:
+        raise ValueError(f"Missing required columns: {sorted(missing)}")
+
+    env_history = _single_environment_history(history_df)
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig.add_trace(
+        go.Scatter(
+            x=env_history["Step"],
+            y=env_history["BaseTemperature"],
+            mode="lines",
+            name="BaseTemperature",
+            text=env_history["ActiveEvents"],
+            hovertemplate=(
+                "Step=%{x}<br>"
+                "BaseTemperature=%{y}<br>"
+                "Events=%{text}"
+                "<extra></extra>"
+            ),
+        ),
+        secondary_y=False,
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=env_history["Step"],
+            y=env_history["Temperature"],
+            mode="lines",
+            name="Temperature with events",
+            text=env_history["ActiveEvents"],
+            hovertemplate=(
+                "Step=%{x}<br>"
+                "Temperature=%{y}<br>"
+                "Events=%{text}"
+                "<extra></extra>"
+            ),
+        ),
+        secondary_y=False,
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=env_history["Step"],
+            y=env_history["BaseHazardLevel"],
+            mode="lines",
+            name="BaseHazardLevel",
+            text=env_history["ActiveEvents"],
+            hovertemplate=(
+                "Step=%{x}<br>"
+                "BaseHazardLevel=%{y}<br>"
+                "Events=%{text}"
+                "<extra></extra>"
+            ),
+        ),
+        secondary_y=True,
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=env_history["Step"],
+            y=env_history["HazardLevel"],
+            mode="lines",
+            name="HazardLevel with events",
+            text=env_history["ActiveEvents"],
+            hovertemplate=(
+                "Step=%{x}<br>"
+                "HazardLevel=%{y}<br>"
+                "Events=%{text}"
+                "<extra></extra>"
+            ),
+        ),
+        secondary_y=True,
+    )
+
+    fig.update_layout(
+        title="Environment Parameters and Disasters",
+        template="plotly_white",
+        hovermode="x unified",
+        height=550,
+    )
+
+    fig.update_xaxes(title_text="Step")
+    fig.update_yaxes(title_text="Temperature", secondary_y=False)
+    fig.update_yaxes(title_text="Hazard level", secondary_y=True)
+
+    return fig
+
+
 def _last_value(history, column: str) -> float:
     """Return the last finite value from a history column."""
     values = history[column].dropna()
@@ -304,6 +465,7 @@ def _winner_colors(baseline_value: float, neural_value: float) -> tuple[str, str
         return "lightgreen", "white"
 
     return "white", "lightgreen"
+
 
 def _make_scatter(
     snap: dict,

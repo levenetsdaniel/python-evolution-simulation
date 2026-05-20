@@ -6,6 +6,7 @@ if TYPE_CHECKING:
 
 import numpy as np
 from config.sim_config import EnvironmentConfig
+from core.environment_events import build_event_scheduler
 
 
 class Environment:
@@ -40,6 +41,14 @@ class Environment:
             "food_availability": self.config.food_availability,
             "hazard_level": self.config.hazard_level_start,
         }
+
+        self.base_params = self.current_params.copy()
+
+        event_configs = getattr(getattr(self.model, "config", None), "environment_events", [])
+        self.event_scheduler = build_event_scheduler(event_configs)
+        self.active_event_names = ""
+        self.event_count = 0
+
         self.current_food = self.current_params["food_availability"]
         self.prev_params = self.current_params.copy()
 
@@ -81,7 +90,7 @@ class Environment:
         """
         Advance the environment by one step.
 
-        Updates environmental parameters according to configuration:
+        Updates environmental parameters according to configuration.
 
         Triggers food distribution among agents.
         """
@@ -89,22 +98,29 @@ class Environment:
         self.prev_params = self.current_params.copy()
         self.time += 1
 
-        self.current_params["food_availability"] += self.config.food_step
-        if self.current_params["food_availability"] < 0:
-            self.current_params["food_availability"] = self.config.food_step
+        self.base_params["food_availability"] += self.config.food_step
+        if self.base_params["food_availability"] < 0:
+            self.base_params["food_availability"] = self.config.food_step
+
+        self.base_params["temperature"] += self.config.temp_step
+        if self.base_params["temperature"] >= self.config.max_temperature:
+            self.base_params["temperature"] = self.config.temp_reset
+
+        if self.base_params["temperature"] <= self.config.min_temperature:
+            self.base_params["temperature"] = self.config.temp_reset
+
+        self.base_params["hazard_level"] += self.config.hazard_step
+        if self.base_params["hazard_level"] < 0 or self.base_params["hazard_level"] > 1:
+            self.base_params["hazard_level"] = self.config.hazard_level_start
+
+        self.active_event_names = self.event_scheduler.active_event_names(self.time)
+        self.event_count = self.event_scheduler.event_count(self.time)
+
+        self.current_params = self.event_scheduler.apply_events(
+            self.base_params,
+            self.time,
+        )
+
         self.current_food = self.current_params["food_availability"]
-
-        self.current_params["temperature"] += self.config.temp_step
-        if self.current_params["temperature"] >= self.config.max_temperature:
-            self.current_params["temperature"] = self.config.temp_reset
-
-        if self.current_params["temperature"] <= self.config.min_temperature:
-            self.current_params["temperature"] = self.config.temp_reset
-
-        self.current_params["hazard_level"] += self.config.hazard_step
-        if self.current_params["hazard_level"] < 0 or self.current_params["hazard_level"] > 1:
-            self.current_params["hazard_level"] = self.config.hazard_level_start
-
-
 
         self.food_distribution()

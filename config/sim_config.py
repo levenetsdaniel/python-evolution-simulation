@@ -17,6 +17,17 @@ class EnvironmentConfig:
 
 
 @dataclass
+class EnvironmentEventConfig:
+    """Parameters controlling one temporary environment event."""
+
+    event_type: str
+    start_step: int
+    duration: int
+    temperature_delta: float = 0.0
+    hazard_delta: float = 0.0
+
+
+@dataclass
 class PopulationConfig:
     """Parameters controlling population size, reproduction, and genetics."""
 
@@ -66,6 +77,8 @@ class SimConfig:
     environment: EnvironmentConfig = field(default_factory=EnvironmentConfig)
     population: PopulationConfig = field(default_factory=PopulationConfig)
     individual: IndividualConfig = field(default_factory=IndividualConfig)
+    environment_events: list[EnvironmentEventConfig] = field(default_factory=list)
+
     n_steps: int = 600
     retrain_steps: int = 50
     seed: int = 42

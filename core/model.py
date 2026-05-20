@@ -53,6 +53,17 @@ class Model(mesa.Model):
                 "Generation": lambda m: m.population.generation,
                 "PopulationSize": lambda m: m.population.actual_pop_size,
 
+                "Temperature": lambda m: m.environment.current_params["temperature"],
+                "FoodAvailability": lambda m: m.environment.current_params["food_availability"],
+                "HazardLevel": lambda m: m.environment.current_params["hazard_level"],
+
+                "BaseTemperature": lambda m: m.environment.base_params["temperature"],
+                "BaseFoodAvailability": lambda m: m.environment.base_params["food_availability"],
+                "BaseHazardLevel": lambda m: m.environment.base_params["hazard_level"],
+
+                "ActiveEvents": lambda m: m.environment.active_event_names,
+                "EventCount": lambda m: m.environment.event_count,
+
                 "AvgFitness": lambda m: m.population.avg_fitness,
                 "AvgAge": lambda m: m.population.avg_age,
                 "AvgSatiation": lambda m: m.population.avg_satiation,
