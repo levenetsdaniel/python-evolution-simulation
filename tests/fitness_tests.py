@@ -243,3 +243,17 @@ class TestFitness:
             )
             f = fitness(ind, env)
             assert 0.0 < f <= 1.0 + 1e-9
+
+    def test_custom_configs_change_temperature_scoring(self):
+        ind = _make_ind()
+        env = _make_env(temperature=ECFG.max_temperature)
+
+        default_score = fitness(ind, env)
+        custom_score = fitness(
+            ind,
+            env,
+            fitness_config=FitnessConfig(temp_20_norm=1.0),
+            environment_config=ECFG,
+        )
+
+        assert custom_score > default_score

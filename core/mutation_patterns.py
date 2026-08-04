@@ -9,12 +9,8 @@ if TYPE_CHECKING:
 
 from abc import ABC, abstractmethod
 import numpy as np
-from config.sim_config import EnvironmentConfig, SimConfig
 from core.training_buffer import TrainingBuffer
 from neural.mutation import neural_mutate
-
-ENV_CNF = EnvironmentConfig()
-SIM_CNF = SimConfig()
 
 
 class MutationStrategy(ABC):
@@ -40,30 +36,30 @@ class BaselineMutation(MutationStrategy):
 class NeuralMutation(MutationStrategy):
     """Neural mutation, using for neural guiding line."""
 
-    _min_t = ENV_CNF.min_temperature
-    _max_t = ENV_CNF.max_temperature
-    _max_f = ENV_CNF.food_availability
-
-    def __init__(self, advisor: CatBoostAdvisor, shift_strength: float = SIM_CNF.shift_strength):
+    def __init__(self, advisor: CatBoostAdvisor, shift_strength: float | None = None):
         self._advisor = advisor
-        self._shift_strength = shift_strength
+        self._shift_strength = 0.7 if shift_strength is None else shift_strength
 
     def mutate(self, pre_genome: np.ndarray, p1: Individual, p2: Individual, model: "Model") -> tuple[
         np.ndarray, np.ndarray]:
         env_params = model.environment.current_params
         prev_env_params = model.environment.prev_params
+        env_config = model.config.environment
+        min_temp = env_config.min_temperature
+        temp_range = env_config.max_temperature - min_temp
+        max_food = env_config.food_availability
 
         env_vec = [
-            (env_params["temperature"] - self._min_t) / (self._max_t - self._min_t),
-            env_params["food_availability"] / self._max_f,
+            (env_params["temperature"] - min_temp) / temp_range,
+            env_params["food_availability"] / max_food,
             env_params["hazard_level"],
         ]
         env_delta_vec = [
             (env_params["temperature"] - prev_env_params.get("temperature", env_params["temperature"]))
-            / (self._max_t - self._min_t),
+            / temp_range,
             (env_params["food_availability"] - prev_env_params.get("food_availability",
                                                                    env_params["food_availability"]))
-            / self._max_f,
+            / max_food,
             env_params["hazard_level"] - prev_env_params.get("hazard_level", env_params["hazard_level"]),
         ]
 

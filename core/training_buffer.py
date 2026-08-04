@@ -32,7 +32,7 @@ class TrainingBuffer:
     MAX_TEMPERATURE = EnvironmentConfig().max_temperature
     MAX_FOOD = EnvironmentConfig().food_availability
 
-    def __init__(self):
+    def __init__(self, environment_config: EnvironmentConfig | None = None):
         """
         Initialize empty training buffer.
 
@@ -40,6 +40,11 @@ class TrainingBuffer:
             - samples: completed training samples
             - _pending: temporary storage for incomplete samples
         """
+
+        environment_config = environment_config or EnvironmentConfig()
+        self.min_temperature = environment_config.min_temperature
+        self.max_temperature = environment_config.max_temperature
+        self.max_food = environment_config.food_availability
 
         self.samples: list[TrainingSample] = []
         self._pending: dict[int, TrainingSample] = {}
@@ -73,18 +78,21 @@ class TrainingBuffer:
             pop_mean_fitness: Mean population fitness.
         """
 
-        temp_norm = (env_params["temperature"] - self.MIN_TEMPERATURE) / (self.MAX_TEMPERATURE - self.MIN_TEMPERATURE)
-        food_norm = env_params["food_availability"] / self.MAX_FOOD
+        temp_norm = (
+            (env_params["temperature"] - self.min_temperature)
+            / (self.max_temperature - self.min_temperature)
+        )
+        food_norm = env_params["food_availability"] / self.max_food
         env_vec = [
             temp_norm,
             food_norm,
             env_params["hazard_level"]
         ]
 
-        delta_temp_norm = env_delta.get("temperature", 0.0) / (self.MAX_TEMPERATURE - self.MIN_TEMPERATURE)
+        delta_temp_norm = env_delta.get("temperature", 0.0) / (self.max_temperature - self.min_temperature)
         env_delta_vec = [
             delta_temp_norm,
-            env_delta.get("food_availability", 0.0) / self.MAX_FOOD,
+            env_delta.get("food_availability", 0.0) / self.max_food,
             env_delta.get("hazard_level", 0.0)
         ]
 

@@ -15,7 +15,7 @@ from core.model import Model
 register_configs()
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="config")
+@hydra.main(version_base=None, config_path="config", config_name="sim_config")
 def main(cfg: SimConfig) -> None:
     cfg = OmegaConf.to_object(cfg)
     model = Model(cfg)

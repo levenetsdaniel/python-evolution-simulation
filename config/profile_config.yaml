@@ -1,6 +1,9 @@
 defaults:
   - profiler_schema
   - environment@simulation_config.environment: default
+  - population@simulation_config.population: schema
+  - individual@simulation_config.individual: schema
+  - fitness@simulation_config.fitness: schema
   - _self_
 
 output_dir: reports

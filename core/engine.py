@@ -10,15 +10,18 @@ from vis.history import is_extinct
 
 class Engine:
     def __init__(self, config: SimConfig | None = None):
-        self.config = config
+        self.config = config or SimConfig()
 
-        self.baseline = Model(config)
+        self.baseline = Model(self.config)
 
         advisor = CatBoostAdvisor(iterations=600, verbose=False)
         train_advisor(self._train(), advisor)
 
-        neural_strategy = NeuralMutation(advisor=advisor)
-        self.neuralline = Model(config, mutation_strategy=neural_strategy)
+        neural_strategy = NeuralMutation(
+            advisor=advisor,
+            shift_strength=self.config.shift_strength,
+        )
+        self.neuralline = Model(self.config, mutation_strategy=neural_strategy)
 
     def _train(self) -> TrainingBuffer:
         training_model = Model(self.config)

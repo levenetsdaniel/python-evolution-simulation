@@ -6,7 +6,7 @@ import mesa
 import numpy as np
 import pytest
 
-from config.sim_config import IndividualConfig, PopulationConfig
+from config.sim_config import EnvironmentConfig, FitnessConfig, IndividualConfig, PopulationConfig
 from core.enums import DeathCause, Gender
 from core.fitness import fitness as fitness_fn
 from core.individual import Individual
@@ -37,6 +37,16 @@ class StubModel(mesa.Model):
         super().__init__(rng=seed)
         self.environment = SimpleNamespace(current_params=dict(env or DEFAULT_ENV))
         self.training_buffer = _Buffer()
+
+
+class ConfiguredStubModel(StubModel):
+    def __init__(self, env=None, seed=0, *, individual=None, fitness=None, environment=None):
+        super().__init__(env=env, seed=seed)
+        self.config = SimpleNamespace(
+            individual=individual or IndividualConfig(),
+            fitness=fitness or FitnessConfig(),
+            environment=environment or EnvironmentConfig(),
+        )
 
 
 class _FixedRNG:
@@ -90,6 +100,24 @@ def test_food_need_floor_and_formula():
     ) * 10))
     assert make_ind(genome=genome).food_need == expected
 
+
+def test_food_need_uses_model_individual_config_when_available():
+    cfg = IndividualConfig(
+        food_need_size_coef=1.0,
+        food_need_resilience_coef=1.0,
+        food_need_speed_coef=1.0,
+        food_need_aggr_coef=1.0,
+    )
+    model = ConfiguredStubModel(individual=cfg)
+    genome = np.zeros(N)
+    for i, lab in enumerate(LABELS):
+        if lab in ("size", "resilience", "speed", "aggressiveness"):
+            genome[i] = 0.5
+
+    ind = make_ind(model=model, genome=genome)
+
+    assert ind.food_need == 20
+
 def test_getitem_matches_genes_map():
     ind = make_ind(genome=np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]))
     for label in LABELS:
@@ -114,6 +142,23 @@ def test_compute_fitness_matches_pure_function_and_does_not_mutate():
     expected = fitness_fn({**ind.genes_map, "satiation": 1.0}, m.environment.current_params)
     assert ind.compute_fitness() == pytest.approx(expected)
     assert ind.genes_map == snapshot
+
+
+def test_compute_fitness_uses_model_fitness_and_environment_config():
+    default_model = StubModel(env={"temperature": 50.0, "food_availability": 10000.0, "hazard_level": 0.0})
+    default_ind = make_ind(model=default_model)
+    default_ind.food_eaten = default_ind.food_need
+    default_score = default_ind.compute_fitness()
+
+    configured_model = ConfiguredStubModel(
+        env={"temperature": 50.0, "food_availability": 10000.0, "hazard_level": 0.0},
+        fitness=FitnessConfig(temp_20_norm=1.0),
+        environment=EnvironmentConfig(min_temperature=-30.0, max_temperature=50.0),
+    )
+    ind = make_ind(model=configured_model)
+    ind.food_eaten = ind.food_need
+
+    assert ind.compute_fitness() > default_score
 
 def test_step_records_fitness_and_increments_age_when_alive():
     m = StubModel()

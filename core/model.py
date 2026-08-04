@@ -42,7 +42,7 @@ class Model(mesa.Model):
 
         self.population = Population(self, config=self.config.population)
 
-        self.training_buffer = TrainingBuffer()
+        self.training_buffer = TrainingBuffer(self.config.environment)
 
         self.deaths_this_step = {DeathCause.AGE: 0, DeathCause.FITNESS: 0, DeathCause.THRESHOLD: 0,
                                  DeathCause.COMPETITION: 0}

@@ -3,8 +3,8 @@ profile_run.py — entry point for profiling EvoSim with cProfile.
 
 Usage:
     python profile_run.py
-    python profile_run.py --n-steps 500
-    python profile_run.py --view
+    python profile_run.py simulation_config.n_steps=500
+    python profile_run.py view=true
 """
 
 from __future__ import annotations
@@ -33,4 +33,3 @@ def main(cfg: ProfilerConfig):
 
 if __name__ == "__main__":
     main()
-

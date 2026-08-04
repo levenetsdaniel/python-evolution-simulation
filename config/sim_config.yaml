@@ -1,6 +1,9 @@
 defaults:
   - sim_schema
   - environment: default
+  - population: schema
+  - individual: schema
+  - fitness: schema
   - _self_
 
 n_steps: 600
