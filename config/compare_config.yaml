@@ -1,0 +1,17 @@
+defaults:
+  - compare_schema
+  - environment@simulation.environment: default
+  - population@simulation.population: schema
+  - individual@simulation.individual: schema
+  - fitness@simulation.fitness: schema
+  - _self_
+
+retrain_steps: 50
+shift_strength: 0.7
+x_trait: heat_resistance
+y_trait: cold_resistance
+view: false
+
+hydra:
+  job:
+    chdir: false

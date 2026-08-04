@@ -4,7 +4,7 @@ import webbrowser
 from pathlib import Path
 
 from config.sim_config import ProfilerConfig
-from core.engine import Engine
+from core.model import Model
 
 from .report import render_html
 from .stats import print_console_summary, save_text_summary
@@ -12,11 +12,7 @@ from .stats import print_console_summary, save_text_summary
 
 def run_profile(config: ProfilerConfig, project_root: Path) -> None:
     """
-    Run the dual-line simulation (baseline + neural) under cProfile.
-
-    Engine construction (warmup run + CatBoost training) is intentionally
-    kept outside the profiler so the report reflects steady-state simulation
-    cost, not one-off advisor training.
+    Run the core simulation under cProfile.
     """
 
     sim_config = config.simulation_config
@@ -29,16 +25,13 @@ def run_profile(config: ProfilerConfig, project_root: Path) -> None:
     prof_path = output_dir / config.prof_filename.format(n_steps=n_steps)
 
     print(f"\n[EvoSim profiler]  n_steps={n_steps}  seed={seed}")
-    print("  warmup + advisor training (excluded from profile)…")
-
-    engine = Engine(sim_config)
-
-    print("  profiler will capture dual-line simulation only")
+    print("  profiler will capture core simulation only")
     print("-" * 60)
 
+    model = Model(sim_config)
     pr = cProfile.Profile()
     pr.enable()
-    engine.run(n_steps)
+    model.run(n_steps)
     pr.disable()
 
     pr.dump_stats(str(prof_path))

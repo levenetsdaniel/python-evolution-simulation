@@ -195,9 +195,13 @@ class Population:
             mutation_deltas: Changes applied during mutation.
         """
 
+        recorder = getattr(self.model, "recorder", None)
+        if recorder is None:
+            return
+
         alive = [a for a in self.model.agents if a.is_alive and a.fitness is not None]
 
-        self.model.training_buffer.record_birth(
+        recorder.record_birth(
             child_id=child_id,
             pre_mutation_genome=pre_mutation_genome,
             mutation_deltas=mutation_deltas,

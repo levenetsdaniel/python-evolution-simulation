@@ -10,7 +10,7 @@ def run_visualization_demo(n_steps: int = 600, seed: int = 0, output_dir: str | 
     """
     Run one simulation and save all basic visualization figures.
     """
-    config = SimConfig(seed=seed, n_steps=n_steps, debug=False, record=False)
+    config = SimConfig(seed=seed, n_steps=n_steps, debug=False)
     model = Model(config)
 
     history_df = collect_history(model, n_steps=n_steps)

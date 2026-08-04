@@ -75,3 +75,29 @@ def test_profile_config_allows_nested_simulation_overrides():
     assert cfg.simulation_config.population.initial_size == 300
     assert cfg.simulation_config.individual.age_scale == 95.0
     assert cfg.simulation_config.fitness.score_floor == 0.01
+
+
+def test_compare_config_contains_separate_simulation_and_ml_settings():
+    cfg = _compose("compare_config")
+
+    assert cfg.simulation.n_steps == 600
+    assert cfg.simulation.population.initial_size == 100
+    assert cfg.retrain_steps == 50
+    assert cfg.shift_strength == 0.7
+
+
+def test_compare_config_allows_nested_simulation_and_comparison_overrides():
+    cfg = _compose(
+        "compare_config",
+        [
+            "environment@simulation.environment=warming",
+            "simulation.population.initial_size=220",
+            "retrain_steps=25",
+            "x_trait=size",
+        ],
+    )
+
+    assert cfg.simulation.environment.temp_start == -15.0
+    assert cfg.simulation.population.initial_size == 220
+    assert cfg.retrain_steps == 25
+    assert cfg.x_trait == "size"

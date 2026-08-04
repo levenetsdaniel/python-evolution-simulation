@@ -7,7 +7,7 @@ from .enums import DeathCause
 from .environment import Environment
 from .mutation_patterns import MutationStrategy, BaselineMutation
 from .population import Population
-from .training_buffer import TrainingBuffer
+from .recording import EvolutionRecorder
 
 
 class Model(mesa.Model):
@@ -17,7 +17,12 @@ class Model(mesa.Model):
     The model executes a step-based simulation loop and tracks key statistics.
     """
 
-    def __init__(self, config: SimConfig | None = None, mutation_strategy: MutationStrategy | None = None):
+    def __init__(
+        self,
+        config: SimConfig | None = None,
+        mutation_strategy: MutationStrategy | None = None,
+        recorder: EvolutionRecorder | None = None,
+    ):
         """
         Initialize the simulation model.
 
@@ -27,7 +32,7 @@ class Model(mesa.Model):
         Initializes:
             - Random number generator
             - Environment and population subsystems
-            - Training buffer for data collection
+            - Optional event recorder for external analytics / ML pipelines
             - Counters for births and deaths
             - DataCollector for tracking simulation metrics
         """
@@ -41,8 +46,7 @@ class Model(mesa.Model):
         self.environment = Environment(self, config=self.config.environment)
 
         self.population = Population(self, config=self.config.population)
-
-        self.training_buffer = TrainingBuffer(self.config.environment)
+        self.recorder = recorder
 
         self.deaths_this_step = {DeathCause.AGE: 0, DeathCause.FITNESS: 0, DeathCause.THRESHOLD: 0,
                                  DeathCause.COMPETITION: 0}
@@ -152,13 +156,3 @@ class Model(mesa.Model):
 
             if self.config.debug:
                 self._display_info()
-
-            if self.config.record:
-                self.training_buffer.save(self.config.output_path)
-                try:
-                    x, y, weights = self.training_buffer.to_numpy()
-                except ValueError:
-                    x = y = weights = None
-
-                if self.config.debug and x is not None and y is not None:
-                    print(f"Training data: x={x.shape}, y={y.shape}")

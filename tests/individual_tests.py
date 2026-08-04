@@ -36,7 +36,7 @@ class StubModel(mesa.Model):
     def __init__(self, env=None, seed=0):
         super().__init__(rng=seed)
         self.environment = SimpleNamespace(current_params=dict(env or DEFAULT_ENV))
-        self.training_buffer = _Buffer()
+        self.recorder = _Buffer()
 
 
 class ConfiguredStubModel(StubModel):
@@ -171,7 +171,7 @@ def test_step_records_fitness_and_increments_age_when_alive():
     assert ind.is_alive and ind.death_cause is None
     assert ind.age == 5
     assert ind.fitness is not None
-    assert m.training_buffer.records == [(ind.unique_id, ind.fitness)]
+    assert m.recorder.records == [(ind.unique_id, ind.fitness)]
 
 def test_step_age_cause_when_old_and_healthy():
     m = StubModel()

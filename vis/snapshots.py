@@ -1,6 +1,6 @@
-"""Run Engine and collect per-agent snapshots for animated visualization."""
+"""Run the comparison runner and collect per-agent snapshots for animated visualization."""
 
-from core.engine import Engine
+from neural.comparison_runner import ComparisonRunner
 from vis.history import is_extinct
 
 
@@ -30,18 +30,18 @@ def _snapshot(model) -> dict:
     return snapshot
 
 
-def run_with_snapshots(engine: Engine, n_steps: int) -> tuple[list[dict], list[dict]]:
-    """Run Engine and collect baseline and neural-line snapshots after each step."""
+def run_with_snapshots(runner: ComparisonRunner, n_steps: int) -> tuple[list[dict], list[dict]]:
+    """Run the comparison runner and collect baseline/neural snapshots after each step."""
     baseline_snaps: list[dict] = []
     neural_snaps: list[dict] = []
 
     for _ in range(n_steps):
-        if is_extinct(engine.baseline) and is_extinct(engine.neuralline):
+        if is_extinct(runner.baseline) and is_extinct(runner.neural_branch):
             break
 
-        engine.step()
+        runner.step()
 
-        baseline_snaps.append(_snapshot(engine.baseline))
-        neural_snaps.append(_snapshot(engine.neuralline))
+        baseline_snaps.append(_snapshot(runner.baseline))
+        neural_snaps.append(_snapshot(runner.neural_branch))
 
     return baseline_snaps, neural_snaps

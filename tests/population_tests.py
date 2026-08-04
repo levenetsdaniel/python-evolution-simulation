@@ -46,7 +46,7 @@ class StubModel(mesa.Model):
             current_params=dict(env),
             prev_params=dict(env),
         )
-        self.training_buffer = _RecordingBuffer()
+        self.recorder = _RecordingBuffer()
         self.births_this_step = 0
         self.deaths_this_step = {dc: 0 for dc in DeathCause}
         self.mutation_strategy = BaselineMutation(PopulationConfig().mutation_std)
@@ -283,7 +283,7 @@ def test_reproduce_creates_clipped_children_and_records_births():
     children = [a for a in m.agents if a not in (f1, f2, male)]
     assert len(children) > 0
     assert m.births_this_step == len(children)
-    assert len(m.training_buffer.births) == len(children)
+    assert len(m.recorder.births) == len(children)
 
     for child in children:
         p1_id, p2_id = child.parent_ids

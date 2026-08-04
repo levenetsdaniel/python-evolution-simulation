@@ -20,16 +20,17 @@
 ```
 evosim/
 ├── core/
-│   ├── engine.py            # Engine: предобучение советчика + параллельные ветви
 │   ├── model.py             # Mesa-модель, главный цикл, DataCollector
 │   ├── population.py        # популяция: инициализация, отбор, размножение, конкуренция
 │   ├── individual.py        # агент-особь: геном, возраст, смертность
 │   ├── environment.py       # среда: температура, пища, распределение ресурса
 │   ├── fitness.py           # функции фитнеса (temp / energy / hazard / proportion)
-│   ├── mutation_patterns.py # стратегии мутации: BaselineMutation, NeuralMutation
-│   ├── training_buffer.py   # сбор (x, y, weights) для обучения советчика
+│   ├── mutation_patterns.py # стратегии мутации ядра симуляции
 │   └── enums.py             # DeathCause, Gender
 ├── neural/
+│   ├── comparison_runner.py # orchestration baseline vs ML-guided comparison
+│   ├── guided_mutation.py   # guided mutation strategy for comparison branch
+│   ├── training_buffer.py   # сбор (x, y, weights) для обучения советчика
 │   ├── advisor.py           # CatBoostAdvisor: обёртка над CatBoostRegressor
 │   ├── trainer.py           # обучение советчика на буфере baseline
 │   └── mutation.py          # neural_mutate: сдвиг генома к предсказанному вектору
@@ -51,10 +52,10 @@ evosim/
 │   ├── sim_config.py        # dataclass-схемы (Sim / Environment / Population / Individual / Fitness / Profiler)
 │   ├── scenarios.py         # пресеты EnvironmentConfig
 │   ├── registry.py          # регистрация схем и сценариев в Hydra ConfigStore
-│   ├── sim_config.yaml      # дефолты для main.py / synthetic_run.py
+│   ├── sim_config.yaml      # дефолты для main.py
 │   └── profile_config.yaml  # дефолты для profile_run.py
-├── main.py                  # baseline + neural-guided через Engine
-├── synthetic_run.py         # одиночный Model: печать статистики, сбор обучающих примеров
+├── main.py                  # основной запуск чистой симуляции
+├── comparison_run.py        # baseline + neural-guided comparison pipeline
 ├── profile_run.py           # точка входа профайлера
 ├── tests_run.py             # запуск всего тестового набора
 ├── requirements.txt
@@ -83,7 +84,7 @@ evosim/
 - **2.1** Тесты (pytest) — покрытие `fitness`, `individual`, `population`, `environment`, `training_buffer`
 - **2.2** Отчёт по профилированию — `cProfile` на эволюционном цикле, HTML- и текстовая сводки
 - **2.3** Расширенные сценарии среды
-- **2.4** Параллельные ветви — `Engine` клонирует конфигурацию на baseline и neural-guided, единый интерфейс истории обеих ветвей
+- **2.4** Параллельные ветви — comparison runner клонирует конфигурацию на baseline и neural-guided, единый интерфейс истории обеих ветвей
 
 **Шевченко**
 - **2.4** Переобучение модели каждые K поколений — советчик обновляется на свежей истории и адаптируется к изменению среды, а не только к начальным условиям
@@ -108,8 +109,8 @@ pip install -r requirements.txt
 
 | Скрипт | Что делает |
 |---|---|
-| `python3 main.py` | Полный прогон `Engine`: предобучает советчика на baseline-буфере и запускает обе ветви (baseline + neural-guided) синхронно. С `view=true` вместо прогона собирает сравнительный дашборд (см. ниже). |
-| `python3 synthetic_run.py` | Одиночный прогон `Model` (только baseline-мутации) с возможностью печати статистики и сохранения обучающего буфера |
+| `python3 main.py` | Основной прогон чистой симуляции. С `view=true` сохраняет базовый набор графиков по одной ветке; с `model_info`, `population_info`, `individual_info` печатает диагностические сводки. |
+| `python3 comparison_run.py` | ML-guided comparison pipeline: обучает советчика на baseline-буфере и запускает обе ветви (baseline + neural-guided). С `view=true` собирает сравнительный дашборд. |
 | `python3 profile_run.py` | Прогон симуляции под `cProfile` |
 | `python3 vis/vis_demo.py` | Сохраняет базовый набор Plotly-графиков по одиночному прогону |
 | `python3 vis/dashboard.py` | Прямой сбор дашборда с дефолтным `SimConfig` (без CLI-override) |
@@ -133,19 +134,13 @@ python3 main.py --help                     # полный список пара�
 | Ключ | Тип | По умолчанию | Описание |
 |---|---|---|---|
 | `n_steps` | int | `600` | Число шагов симуляции |
-| `retrain_steps` | int | `50` | Период переобучения советчика (только `Engine`) |
 | `seed` | int | `42` | Сид генератора случайных чисел |
-| `shift_strength` | float | `0.7` | Сила сдвига генома к предсказанию советчика в `NeuralMutation` |
-| `output_path` | str | `data/training_samples.json` | Путь для сохранения обучающего буфера (`synthetic_run.py` при `record=true`) |
-| `record` | bool | `false` | Записывать буфер обучающих примеров на диск |
-| `view` | bool | `false` | В `main.py` — собрать и сохранить дашборд вместо обычного прогона `Engine`. В `profile_run.py` — автоматически открыть HTML-отчёт по профилированию. |
-| `x_trait` | str | `heat_resistance` | Ось X для animated scatter в дашборде (любое имя из `population.genome_labels`) |
-| `y_trait` | str | `cold_resistance` | Ось Y для animated scatter в дашборде |
+| `view` | bool | `false` | В `main.py` — собрать и сохранить базовые графики по одной ветке. В `profile_run.py` — автоматически открыть HTML-отчёт по профилированию. |
 | `debug` | bool | `false` | Печатать подробную статистику по каждому шагу |
-| `model_info` | bool | `false` | Сводка по модели (`synthetic_run.py`) |
+| `model_info` | bool | `false` | Сводка по модели (`main.py`) |
 | `steps_info` | int | `5` | Сколько последних шагов показать в `model_info` |
-| `population_info` | bool | `false` | Сводка по популяции (`synthetic_run.py`) |
-| `individual_info` | bool | `false` | Сводка по агентам (`synthetic_run.py`) |
+| `population_info` | bool | `false` | Сводка по популяции (`main.py`) |
+| `individual_info` | bool | `false` | Сводка по агентам (`main.py`) |
 
 ### `environment` (`EnvironmentConfig`)
 
@@ -225,16 +220,10 @@ python3 main.py environment=famine population.initial_size=200 n_steps=1000
 
 ## Примеры
 
-Полный прогон `Engine`:
+Полный прогон симуляции:
 
 ```bash
 python3 main.py
-```
-
-Увеличенная сила нейросдвига и фиксированный сид:
-
-```bash
-python3 main.py shift_strength=0.9 seed=7
 ```
 
 Сценарий + переопределение популяции:
@@ -246,19 +235,17 @@ python3 main.py environment=harsh_seasons population.initial_size=200 n_steps=12
 Одиночный baseline-прогон с печатью метрик модели:
 
 ```bash
-python3 synthetic_run.py n_steps=200 model_info=true
+python3 main.py n_steps=200 model_info=true
 ```
 
 Сбор обучающей выборки для нейросоветчика:
 
-```bash
-python3 synthetic_run.py n_steps=1000 record=true output_path=data/run_01.json
-```
+Сравнительный ML-guided запуск теперь вынесен в `comparison_run.py`.
 
 Полный дебаг-прогон с пошаговыми логами:
 
 ```bash
-python3 synthetic_run.py n_steps=50 debug=true population_info=true individual_info=true
+python3 main.py n_steps=50 debug=true population_info=true individual_info=true
 ```
 
 Базовая визуализация (Plotly-графики в `vis/graphics/`):

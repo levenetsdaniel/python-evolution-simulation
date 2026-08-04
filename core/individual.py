@@ -109,7 +109,9 @@ class Individual(mesa.Agent):
         """
 
         self.fitness = self.compute_fitness()
-        self.model.training_buffer.record_fitness(self.unique_id, self.fitness)
+        recorder = getattr(self.model, "recorder", None)
+        if recorder is not None:
+            recorder.record_fitness(self.unique_id, self.fitness)
         if self.fitness < self.config.fitness_death_threshold:
             self.is_alive = False
             self.death_cause = DeathCause.THRESHOLD

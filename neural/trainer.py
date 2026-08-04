@@ -1,7 +1,7 @@
 import numpy as np
 
-from core.training_buffer import TrainingBuffer
 from neural.advisor import CatBoostAdvisor
+from neural.training_buffer import TrainingBuffer
 
 
 def train_advisor(

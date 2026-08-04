@@ -4,10 +4,13 @@ import numpy as np
 import pytest
 
 from neural.mutation import _build_features, neural_mutate
+from neural.training_buffer import TrainingBuffer
 
 
 N_GENES = 7
 N_FEATURES = 22
+MIN_TEMPERATURE = TrainingBuffer.MIN_TEMPERATURE
+TEMP_RANGE = TrainingBuffer.MAX_TEMPERATURE - MIN_TEMPERATURE
 
 
 @pytest.fixture
@@ -87,6 +90,7 @@ def test_features_accept_dict_env():
     )
 
     assert out.shape == (N_FEATURES,)
+    assert out[N_GENES] == pytest.approx((20.0 - MIN_TEMPERATURE) / TEMP_RANGE)
 
 
 def test_features_dtype_float32():

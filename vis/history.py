@@ -52,7 +52,7 @@ def collect_history(model: Model, n_steps: int) -> pd.DataFrame:
         model.step()
         rows.append(collect_history_row(model, env_before))
 
-        if _is_extinct(model):
+        if is_extinct(model):
             break
 
     return pd.DataFrame(rows)
