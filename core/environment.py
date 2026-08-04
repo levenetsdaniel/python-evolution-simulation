@@ -42,6 +42,8 @@ class Environment:
         }
         self.current_food = self.current_params["food_availability"]
         self.prev_params = self.current_params.copy()
+        self._temperature_step = self.config.temp_step
+        self._hazard_step = self.config.hazard_step
 
     def food_distribution(self):
         """
@@ -57,6 +59,10 @@ class Environment:
         self.model.population.remove_food()
         alive = [a for a in self.model.agents if a.is_alive]
 
+        if not alive:
+            self.current_food = 0.0
+            return
+
         raw_weight = np.array([a.genes_map["speed"] * 2.0 / a.food_need for a in alive])
         raw_weight = np.clip(raw_weight, 1e-6, None)
         weights = raw_weight / raw_weight.sum()
@@ -67,7 +73,7 @@ class Environment:
         hungry = []
 
         for a in ordered:
-            if a.food_need < self.current_food:
+            if a.food_need <= self.current_food:
                 a.food_eaten = a.food_need
                 self.current_food -= a.food_eaten
                 fed.append(a)
@@ -89,22 +95,43 @@ class Environment:
         self.prev_params = self.current_params.copy()
         self.time += 1
 
-        self.current_params["food_availability"] += self.config.food_step
-        if self.current_params["food_availability"] < 0:
-            self.current_params["food_availability"] = self.config.food_step
+        self.current_params["food_availability"] = max(
+            0.0,
+            self.current_params["food_availability"] + self.config.food_step,
+        )
         self.current_food = self.current_params["food_availability"]
 
-        self.current_params["temperature"] += self.config.temp_step
-        if self.current_params["temperature"] >= self.config.max_temperature:
-            self.current_params["temperature"] = self.config.temp_reset
+        self.current_params["temperature"] = self._next_temperature()
 
-        if self.current_params["temperature"] <= self.config.min_temperature:
-            self.current_params["temperature"] = self.config.temp_reset
-
-        self.current_params["hazard_level"] += self.config.hazard_step
-        if self.current_params["hazard_level"] < 0 or self.current_params["hazard_level"] > 1:
-            self.current_params["hazard_level"] = self.config.hazard_level_start
-
-
-
+        self.current_params["hazard_level"] = self._next_hazard_level()
         self.food_distribution()
+
+    def _next_temperature(self) -> float:
+        """Advance temperature and reflect it at configured physical bounds."""
+        temperature = self.current_params["temperature"] + self._temperature_step
+        minimum = self.config.min_temperature
+        maximum = self.config.max_temperature
+
+        while temperature > maximum or temperature < minimum:
+            if temperature > maximum:
+                temperature = maximum - (temperature - maximum)
+                self._temperature_step = -abs(self._temperature_step)
+            else:
+                temperature = minimum + (minimum - temperature)
+                self._temperature_step = abs(self._temperature_step)
+
+        return temperature
+
+    def _next_hazard_level(self) -> float:
+        """Advance hazard level and reflect it at the valid probability bounds."""
+        hazard_level = self.current_params["hazard_level"] + self._hazard_step
+
+        while hazard_level > 1.0 or hazard_level < 0.0:
+            if hazard_level > 1.0:
+                hazard_level = 1.0 - (hazard_level - 1.0)
+                self._hazard_step = -abs(self._hazard_step)
+            else:
+                hazard_level = -hazard_level
+                self._hazard_step = abs(self._hazard_step)
+
+        return hazard_level

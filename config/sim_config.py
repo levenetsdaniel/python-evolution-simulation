@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from math import isfinite
 
 from .output_paths import PROFILING_DIR
 
@@ -11,7 +12,6 @@ class EnvironmentConfig:
     food_step: float = 0.0
     temp_start: float = 20.0
     temp_step: float = 0.05
-    temp_reset: float = -5.0
     hazard_level_start: float = 0.1
     hazard_step: float = 0.001
     min_temperature: float = -30.0
@@ -108,3 +108,88 @@ class ProfilerConfig:
     top_n_console: int = 15
 
     view: bool = False
+
+
+def validate_sim_config(config: SimConfig) -> None:
+    """Reject invalid simulation parameters before the model starts."""
+    environment = config.environment
+    population = config.population
+    individual = config.individual
+    fitness = config.fitness
+
+    _require(environment.min_temperature < environment.max_temperature, "min_temperature must be below max_temperature")
+    _require(environment.food_availability >= 0, "food_availability must be non-negative")
+    _require(0 <= environment.hazard_level_start <= 1, "hazard_level_start must be in [0, 1]")
+
+    required_labels = {
+        "heat_resistance",
+        "cold_resistance",
+        "metabolic_rate",
+        "resilience",
+        "size",
+        "speed",
+        "aggressiveness",
+    }
+    _require(
+        len(population.genome_labels) == len(required_labels) and set(population.genome_labels) == required_labels,
+        "genome_labels must contain each required trait exactly once",
+    )
+    _require(population.initial_size >= 0, "initial_size must be non-negative")
+    _require(population.mutation_std >= 0, "mutation_std must be non-negative")
+    _require(0 <= population.reproduction_rate <= 1, "reproduction_rate must be in [0, 1]")
+    _require(population.min_reproduction_age >= 0, "min_reproduction_age must be non-negative")
+    _require(0 <= population.wound_base <= 1, "wound_base must be in [0, 1]")
+
+    _require(0 <= individual.fitness_death_threshold <= 1, "fitness_death_threshold must be in [0, 1]")
+    _require(0 <= individual.fitness_death_prob_coef <= 1, "fitness_death_prob_coef must be in [0, 1]")
+    _require(individual.age_scale > 0, "age_scale must be positive")
+    _require(individual.age_death_power > 0, "age_death_power must be positive")
+    _require(
+        all(
+            coefficient >= 0
+            for coefficient in (
+                individual.food_need_size_coef,
+                individual.food_need_resilience_coef,
+                individual.food_need_speed_coef,
+                individual.food_need_aggr_coef,
+            )
+        ),
+        "food need coefficients must be non-negative",
+    )
+
+    _require(0 <= fitness.temp_20_norm <= 1, "temp_20_norm must be in [0, 1]")
+    _require(fitness.temp_score_sharpness > 0, "temp_score_sharpness must be positive")
+    _require(
+        all(
+            coefficient >= 0
+            for coefficient in (
+                fitness.metabolic_rate_efficiency_penalty,
+                fitness.resilience_efficiency_penalty,
+                fitness.aggression_metabolic_penalty,
+                fitness.speed_metabolic_ratio,
+                fitness.size_metabolic_ratio,
+                fitness.proportion_penalty,
+            )
+        ),
+        "fitness coefficients must be non-negative",
+    )
+    _require(0 <= fitness.score_floor <= 1, "score_floor must be in [0, 1]")
+
+    _require(config.n_steps >= 0, "n_steps must be non-negative")
+    _require(config.steps_info >= 0, "steps_info must be non-negative")
+
+    for name, value in _numeric_fields(config):
+        _require(isfinite(value), f"{name} must be finite")
+
+
+def _numeric_fields(config: SimConfig):
+    for group_name in ("environment", "population", "individual", "fitness"):
+        group = getattr(config, group_name)
+        for name, value in vars(group).items():
+            if isinstance(value, (int, float)):
+                yield f"{group_name}.{name}", value
+
+
+def _require(condition: bool, message: str) -> None:
+    if not condition:
+        raise ValueError(f"Invalid simulation config: {message}")

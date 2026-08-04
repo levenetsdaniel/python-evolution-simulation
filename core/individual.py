@@ -42,6 +42,10 @@ class Individual(mesa.Agent):
         self.config = getattr(model_config, "individual", None) or DEFAULT_INDIVIDUAL_CONFIG
         self.genome = np.array(genome, dtype=float)
         self.genome_labels = genome_labels
+        if self.genome.ndim != 1 or len(self.genome) != len(self.genome_labels):
+            raise ValueError("genome must be one-dimensional and match genome_labels")
+        if not np.isfinite(self.genome).all() or not ((0.0 <= self.genome) & (self.genome <= 1.0)).all():
+            raise ValueError("genome values must be finite and within [0, 1]")
         self.parent_ids = parent_ids
         self.generation = generation
         self.genes_map = dict(zip(self.genome_labels, self.genome))
@@ -79,7 +83,7 @@ class Individual(mesa.Agent):
         Ratio of consumed food to required food.
         """
 
-        return self.food_eaten / self.food_need
+        return min(1.0, self.food_eaten / self.food_need)
 
     def compute_fitness(self) -> float:
         """
@@ -107,6 +111,9 @@ class Individual(mesa.Agent):
 
         Checks if the agent is dead.
         """
+
+        if not self.is_alive:
+            return
 
         self.fitness = self.compute_fitness()
         recorder = getattr(self.model, "recorder", None)

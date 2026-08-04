@@ -15,3 +15,12 @@ class Gender(Enum):
 
     MALE = "male"
     FEMALE = "female"
+
+
+class RunStatus(Enum):
+    """Terminal state of a simulation run."""
+
+    COMPLETED = "completed"
+    EXTINCT = "extinct"
+    NO_FEMALES = "no_females"
+    NO_MALES = "no_males"

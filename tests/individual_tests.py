@@ -124,13 +124,13 @@ def test_getitem_matches_genes_map():
         assert ind[label] == ind.genes_map[label]
 
 
-def test_satiation_unfed_full_and_overfed():
+def test_satiation_is_limited_to_fullness():
     ind = make_ind()
     assert ind.satiation == 0.0
     ind.food_eaten = ind.food_need
     assert ind.satiation == pytest.approx(1.0)
     ind.food_eaten = ind.food_need * 2
-    assert ind.satiation == pytest.approx(2.0)
+    assert ind.satiation == pytest.approx(1.0)
 
 
 def test_compute_fitness_matches_pure_function_and_does_not_mutate():
@@ -173,6 +173,20 @@ def test_step_records_fitness_and_increments_age_when_alive():
     assert ind.fitness is not None
     assert m.recorder.records == [(ind.unique_id, ind.fitness)]
 
+
+def test_step_does_not_change_an_agent_already_marked_dead():
+    m = StubModel()
+    ind = make_ind(model=m, age=4)
+    ind.is_alive = False
+    ind.death_cause = DeathCause.COMPETITION
+
+    ind.step()
+
+    assert ind.age == 4
+    assert ind.fitness is None
+    assert ind.death_cause == DeathCause.COMPETITION
+    assert m.recorder.records == []
+
 def test_step_age_cause_when_old_and_healthy():
     m = StubModel()
     ind = make_ind(model=m, age=300)
@@ -214,3 +228,17 @@ def test_from_parents_inherits_labels_ids_and_genome():
     assert child.genome_labels == p1.genome_labels
     np.testing.assert_array_equal(child.genome, genome)
     assert child.generation == 10
+
+
+@pytest.mark.parametrize(
+    "genome, labels",
+    [
+        (np.array([0.1, 0.2]), LABELS),
+        (np.array([0.1] * N + [0.2]), LABELS),
+        (np.array([0.1] * (N - 1) + [float("nan")]), LABELS),
+        (np.array([0.1] * (N - 1) + [1.1]), LABELS),
+    ],
+)
+def test_init_rejects_invalid_genome(genome, labels):
+    with pytest.raises(ValueError):
+        Individual(StubModel(), genome, labels, parent_ids=None)

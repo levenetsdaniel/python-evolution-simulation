@@ -1,13 +1,23 @@
 from __future__ import annotations
 
-import mesa
-from config.sim_config import SimConfig
+from dataclasses import dataclass
 
-from .enums import DeathCause
+import mesa
+from config.sim_config import SimConfig, validate_sim_config
+
+from .enums import DeathCause, RunStatus
 from .environment import Environment
 from .mutation_patterns import MutationStrategy, BaselineMutation
 from .population import Population
 from .recording import EvolutionRecorder
+
+
+@dataclass(frozen=True)
+class SimulationResult:
+    """Summary of a completed or prematurely terminated simulation run."""
+
+    status: RunStatus
+    completed_steps: int
 
 
 class Model(mesa.Model):
@@ -38,6 +48,7 @@ class Model(mesa.Model):
         """
 
         self.config = config or SimConfig()
+        validate_sim_config(self.config)
         super().__init__(rng=self.config.seed)
         self.step_count = 0
 
@@ -84,6 +95,7 @@ class Model(mesa.Model):
         )
 
         self.population.initialize()
+        self.datacollector.collect(self)
 
     def _display_info(self):
         print("step", self.step_count)
@@ -127,7 +139,7 @@ class Model(mesa.Model):
         if self.config.debug:
             self._display_info()
 
-    def run(self, n_steps: int = 100):
+    def run(self, n_steps: int = 100) -> SimulationResult:
         """
         Run the simulation for a given number of steps.
 
@@ -139,20 +151,24 @@ class Model(mesa.Model):
             n_steps: Maximum number of steps to simulate.
         """
 
+        status = self._terminal_status()
+        if status is not None:
+            return SimulationResult(status=status, completed_steps=self.step_count)
+
         for _ in range(n_steps):
             self.step()
 
-            if len(self.agents) == 0:
-                print(f"Population extinct at step {self.step_count}")
-                break
+            status = self._terminal_status()
+            if status is not None:
+                return SimulationResult(status=status, completed_steps=self.step_count)
 
-            if self.population.count_females == 0:
-                print(f"Population extinct at step {self.step_count}, all males died")
-                break
+        return SimulationResult(status=RunStatus.COMPLETED, completed_steps=self.step_count)
 
-            if self.population.count_males == 0:
-                print(f"Population extinct at step {self.step_count}, all females died")
-                break
-
-            if self.config.debug:
-                self._display_info()
+    def _terminal_status(self) -> RunStatus | None:
+        if len(self.agents) == 0:
+            return RunStatus.EXTINCT
+        if self.population.count_females == 0:
+            return RunStatus.NO_FEMALES
+        if self.population.count_males == 0:
+            return RunStatus.NO_MALES
+        return None

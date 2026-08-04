@@ -58,8 +58,10 @@ class _StubRNG:
     def __init__(self, random_val=0.0):
         self.random_val = random_val
 
-    def random(self):
-        return self.random_val
+    def random(self, size=None):
+        if size is None:
+            return self.random_val
+        return np.full(size, self.random_val)
 
     def choice(self, seq, *args, **kwargs):
         if isinstance(seq, (int, np.integer)):
@@ -151,6 +153,22 @@ def test_avg_properties_compute_means_over_alive_agents_only():
     assert pop.avg_speed == pytest.approx(expected[5])
     assert pop.avg_aggressiveness == pytest.approx(expected[6])
 
+
+def test_avg_properties_return_zero_for_empty_population():
+    m = StubModel()
+    pop = Population(m)
+
+    assert pop.avg_fitness == 0.0
+    assert pop.avg_age == 0.0
+    assert pop.avg_satiation == 0.0
+    assert pop.avg_heat_resistance == 0.0
+    assert pop.avg_cold_resistance == 0.0
+    assert pop.avg_metabolic_rate == 0.0
+    assert pop.avg_resilience == 0.0
+    assert pop.avg_size == 0.0
+    assert pop.avg_speed == 0.0
+    assert pop.avg_aggressiveness == 0.0
+
 def test_remove_dead_drops_dead_agents_and_counts_by_cause():
     m = StubModel()
     pop = Population(m)
@@ -188,9 +206,47 @@ def test_compete_winning_attacker_steals_food_with_zero_aggression_victim():
     pop.compete(hungry=[attacker], fed=[victim])
 
     assert attacker.food_eaten + victim.food_eaten == 100
-    assert attacker.food_eaten > 0
-    assert victim.food_eaten >= 0
+    assert attacker.food_eaten == 100
+    assert victim.food_eaten == 0
     assert victim.is_alive is True
+
+
+def test_compete_stops_after_the_first_unsuccessful_attempt():
+    m = StubModel()
+    pop = Population(m)
+
+    attacker = make_ind(m, food_eaten=0)
+    victim_a = make_ind(m, food_eaten=50)
+    victim_b = make_ind(m, food_eaten=50)
+    m.rng = _StubRNG(random_val=1.0)
+
+    pop.compete(hungry=[attacker], fed=[victim_a, victim_b])
+
+    assert attacker.food_eaten == 0
+    assert victim_a.food_eaten == 50
+    assert victim_b.food_eaten == 50
+
+
+def test_compete_does_not_feed_attacker_above_its_need():
+    m = StubModel()
+    pop = Population(m)
+
+    attacker = make_ind(
+        m,
+        genome=np.array([0.5, 0.5, 0.5, 0.5, 1.0, 0.5, 1.0]),
+    )
+    attacker.food_eaten = attacker.food_need - 1
+    victim = make_ind(
+        m,
+        food_eaten=100,
+        genome=np.array([0.5, 0.5, 0.5, 0.5, 0.1, 0.5, 0.0]),
+    )
+    m.rng = _StubRNG(random_val=0.0)
+
+    pop.compete(hungry=[attacker], fed=[victim])
+
+    assert attacker.food_eaten == attacker.food_need
+    assert attacker.satiation == 1.0
 
 
 def test_compete_victim_can_die_with_competition_cause():
@@ -267,6 +323,48 @@ def test_reproduce_no_offspring_when_all_below_min_reproduction_age():
     assert m.births_this_step == 0
 
 
+def test_reproduce_creates_no_offspring_when_all_eligible_females_are_hungry():
+    m = StubModel()
+    pop = Population(m)
+
+    make_ind(m, gender=Gender.FEMALE, age=5, fitness=0.5, food_eaten=0)
+    make_ind(m, gender=Gender.MALE, age=5, fitness=0.6, food_eaten=0)
+    m.rng = _StubRNG(random_val=0.0)
+
+    pop.reproduce()
+
+    assert m.births_this_step == 0
+
+
+def test_reproduce_scales_birth_probability_with_each_female_satiation():
+    m = StubModel()
+    pop = Population(m, config=PopulationConfig(reproduction_rate=0.4))
+
+    full = make_ind(m, gender=Gender.FEMALE, age=5, fitness=0.5)
+    half = make_ind(m, gender=Gender.FEMALE, age=5, fitness=0.5)
+    make_ind(m, gender=Gender.MALE, age=5, fitness=0.6)
+    full.food_eaten = full.food_need
+    half.food_eaten = half.food_need / 2
+    m.rng = _StubRNG(random_val=0.3)
+
+    pop.reproduce()
+
+    assert m.births_this_step == 1
+
+
+def test_selection_weights_are_equal_for_equal_fitness():
+    m = StubModel()
+    pop = Population(m)
+    first = make_ind(m, gender=Gender.MALE, fitness=0.6)
+    second = make_ind(m, gender=Gender.MALE, fitness=0.6)
+    stronger = make_ind(m, gender=Gender.MALE, fitness=0.9)
+
+    weights = pop._selection_weights([first, second, stronger])
+
+    assert weights[0] == pytest.approx(weights[1])
+    assert weights[2] > weights[0]
+
+
 def test_reproduce_creates_clipped_children_and_records_births():
     m = StubModel()
     pop = Population(m)
@@ -277,6 +375,9 @@ def test_reproduce_creates_clipped_children_and_records_births():
                   food_eaten=0, genome=np.zeros(N))
     male = make_ind(m, gender=Gender.MALE, age=5, fitness=0.6,
                     food_eaten=0, genome=np.ones(N))
+    f1.food_eaten = f1.food_need
+    f2.food_eaten = f2.food_need
+    m.rng = _StubRNG(random_val=0.0)
 
     pop.reproduce()
 

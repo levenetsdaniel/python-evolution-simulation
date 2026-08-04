@@ -60,52 +60,62 @@ class Population:
     @property
     def avg_fitness(self) -> np.floating:
         """Compute average fitness of alive individuals."""
-        return np.mean([a.fitness for a in self.model.agents if a.fitness is not None and a.is_alive] or [0])
+        return self._mean_alive(lambda agent: agent.fitness, require_fitness=True)
 
     @property
     def avg_age(self) -> np.floating:
         """Compute average age of alive individuals."""
-        return np.mean([a.age for a in self.model.agents if a.is_alive])
+        return self._mean_alive(lambda agent: agent.age)
 
     @property
     def avg_satiation(self) -> np.floating:
         """Compute average satiation of alive individuals."""
-        return np.mean([a.satiation for a in self.model.agents if a.is_alive])
+        return self._mean_alive(lambda agent: agent.satiation)
 
     @property
     def avg_heat_resistance(self) -> np.floating:
         """Compute average heat resistance trait."""
-        return np.mean([a["heat_resistance"] for a in self.model.agents if a.is_alive])
+        return self._mean_alive(lambda agent: agent["heat_resistance"])
 
     @property
     def avg_cold_resistance(self) -> np.floating:
         """Compute average cold resistance trait."""
-        return np.mean([a["cold_resistance"] for a in self.model.agents if a.is_alive])
+        return self._mean_alive(lambda agent: agent["cold_resistance"])
 
     @property
     def avg_metabolic_rate(self) -> np.floating:
         """Compute average metabolic rate trait."""
-        return np.mean([a["metabolic_rate"] for a in self.model.agents if a.is_alive])
+        return self._mean_alive(lambda agent: agent["metabolic_rate"])
 
     @property
     def avg_resilience(self) -> np.floating:
         """Compute average resilience trait."""
-        return np.mean([a["resilience"] for a in self.model.agents if a.is_alive])
+        return self._mean_alive(lambda agent: agent["resilience"])
 
     @property
     def avg_size(self) -> np.floating:
         """Compute average size trait."""
-        return np.mean([a["size"] for a in self.model.agents if a.is_alive])
+        return self._mean_alive(lambda agent: agent["size"])
 
     @property
     def avg_speed(self) -> np.floating:
         """Compute average speed trait."""
-        return np.mean([a["speed"] for a in self.model.agents if a.is_alive])
+        return self._mean_alive(lambda agent: agent["speed"])
 
     @property
     def avg_aggressiveness(self) -> np.floating:
         """Compute average aggressiveness trait."""
-        return np.mean([a["aggressiveness"] for a in self.model.agents if a.is_alive])
+        return self._mean_alive(lambda agent: agent["aggressiveness"])
+
+    def _mean_alive(self, value, *, require_fitness: bool = False) -> np.floating:
+        """Return a stable mean over alive agents, using zero after extinction."""
+        agents = (
+            agent
+            for agent in self.model.agents
+            if agent.is_alive and (not require_fitness or agent.fitness is not None)
+        )
+        values = [value(agent) for agent in agents]
+        return np.mean(values) if values else np.float64(0.0)
 
     def remove_dead(self):
         """
@@ -154,32 +164,37 @@ class Population:
         """
 
         for attacker in hungry:
-            if not fed:
-                break
+            while fed and attacker.food_eaten < attacker.food_need:
+                victim = self.model.rng.choice(fed)
 
-            victim = self.model.rng.choice(fed)
+                a_power = attacker["size"] + attacker["aggressiveness"]
+                v_power = victim["size"] + victim["aggressiveness"]
+                total = a_power + v_power
 
-            a_power = attacker["size"] + attacker["aggressiveness"]
-            v_power = victim["size"] + victim["aggressiveness"]
-            total = a_power + v_power
+                if total == 0:
+                    win_prob = 0.5
+                    power_diff = 0.0
+                else:
+                    win_prob = a_power / total
+                    power_diff = (a_power - v_power) / total
 
-            if total == 0:
-                win_prob = 0.5
-                power_diff = 0.0
-            else:
-                win_prob = a_power / total
-                power_diff = (a_power - v_power) / total
+                if self.model.rng.random() >= win_prob:
+                    break
 
-            if self.model.rng.random() < win_prob:
                 steal_coef = np.clip(0.5 + 0.5 * power_diff, 0.1, 0.9)
                 stolen = max(1, int(victim.food_eaten * steal_coef))
-                stolen = min(stolen, victim.food_eaten)
+                remaining_need = attacker.food_need - attacker.food_eaten
+                stolen = min(stolen, victim.food_eaten, remaining_need)
+
+                if stolen <= 0:
+                    fed.remove(victim)
+                    break
 
                 victim.food_eaten -= stolen
                 attacker.food_eaten += stolen
 
                 self._death_prob(victim, power_diff)
-                if not victim.is_alive:
+                if not victim.is_alive or victim.food_eaten == 0:
                     fed.remove(victim)
 
     def record_birth(self, child_id: int, p1: Individual, p2: Individual, pre_mutation_genome: np.ndarray,
@@ -234,40 +249,46 @@ class Population:
         males = list(a for a in self.model.agents if
                      a.is_alive and a.fitness is not None and a.gender == Gender.MALE and a.age >= self.config.min_reproduction_age)
 
-        n_offspring = max(2, int(len(females) * self.avg_satiation * self.config.reproduction_rate))
-        for _ in range(n_offspring):
-            if males and females:
-                p1_fitness = [a.fitness for a in females]
+        if not females or not males:
+            return
 
-                ranks1 = np.argsort(np.argsort(p1_fitness)) + 1
-                weights1 = ranks1 / ranks1.sum()
+        male_weights = self._selection_weights(males)
 
-                p1 = females[self.model.rng.choice(len(females), p=weights1)]
+        for p1 in females:
+            birth_probability = np.clip(
+                self.config.reproduction_rate * p1.satiation,
+                0.0,
+                1.0,
+            )
+            if self.model.rng.random() >= birth_probability:
+                continue
 
-                p2_fitness = [a.fitness for a in males]
+            p2 = males[self.model.rng.choice(len(males), p=male_weights)]
 
-                ranks2 = np.argsort(np.argsort(p2_fitness)) + 1
-                weights2 = ranks2 / ranks2.sum()
+            mask = self.model.rng.random(len(p1.genome)) > 0.5
+            pre_mutation_genome = np.where(mask, p1.genome, p2.genome)
 
-                p2 = males[self.model.rng.choice(len(males), p=weights2)]
-                females.remove(p1)
+            genome, mutation_deltas = self.model.mutation_strategy.mutate(pre_mutation_genome, p1, p2, self.model)
+            child = Individual.from_parents(
+                model=self.model,
+                p1=p1,
+                p2=p2,
+                genome=genome,
+                generation=self.generation,
+            )
 
-                mask = self.model.rng.random(len(p1.genome)) > 0.5
-                pre_mutation_genome = np.where(mask, p1.genome, p2.genome)
+            self.model.agents.add(child)
+            self.model.births_this_step += 1
 
-                genome, mutation_deltas = self.model.mutation_strategy.mutate(pre_mutation_genome, p1, p2, self.model)
-                child = Individual.from_parents(
-                    model=self.model,
-                    p1=p1,
-                    p2=p2,
-                    genome=genome,
-                    generation=self.generation,
-                )
+            self.record_birth(child.unique_id, p1, p2, pre_mutation_genome, mutation_deltas)
 
-                self.model.agents.add(child)
-                self.model.births_this_step += 1
-
-                self.record_birth(child.unique_id, p1, p2, pre_mutation_genome, mutation_deltas)
+    @staticmethod
+    def _selection_weights(candidates: list[Individual]) -> np.ndarray:
+        """Return rank-based parent-selection weights with unbiased fitness ties."""
+        fitness_values = np.asarray([candidate.fitness for candidate in candidates], dtype=float)
+        _, rank_groups = np.unique(fitness_values, return_inverse=True)
+        weights = rank_groups + 1
+        return weights / weights.sum()
 
     def step(self):
         """Advance population state by one step."""

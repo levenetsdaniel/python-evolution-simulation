@@ -3,13 +3,16 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from omegaconf import OmegaConf
 
 import comparison_run
 import main as main_entry
 from config.output_paths import SIMULATION_PLOTS_DIR
-from config.sim_config import ComparisonConfig, SimConfig
-from core.model import Model
+from config.scenarios import SCENARIOS
+from config.sim_config import ComparisonConfig, EnvironmentConfig, SimConfig
+from core.enums import RunStatus
+from core.model import Model, SimulationResult
 
 
 def test_core_model_runs_without_recorder():
@@ -19,6 +22,59 @@ def test_core_model_runs_without_recorder():
 
     model_df = model.datacollector.get_model_vars_dataframe()
     assert len(model_df) > 0
+
+
+def test_model_handles_extinction_from_food_shortage_without_nan_metrics():
+    config = SimConfig(
+        n_steps=3,
+        seed=0,
+        environment=EnvironmentConfig(food_availability=0.0),
+    )
+    model = Model(config)
+
+    result = model.run(config.n_steps)
+
+    model_df = model.datacollector.get_model_vars_dataframe()
+    assert result.status == RunStatus.EXTINCT
+    assert result.completed_steps == 1
+    assert len(model_df) == 2
+    assert model.population.actual_pop_size == 0
+    assert not model_df.isna().any().any()
+
+
+def test_model_is_reproducible_for_the_same_seed():
+    config = SimConfig(n_steps=20, seed=17)
+    first = Model(config)
+    second = Model(config)
+
+    first.run(config.n_steps)
+    second.run(config.n_steps)
+
+    pd.testing.assert_frame_equal(
+        first.datacollector.get_model_vars_dataframe(),
+        second.datacollector.get_model_vars_dataframe(),
+    )
+
+
+@pytest.mark.parametrize("scenario_name", SCENARIOS)
+def test_builtin_scenarios_preserve_model_invariants(scenario_name):
+    config = SimConfig(
+        n_steps=20,
+        seed=7,
+        environment=SCENARIOS[scenario_name],
+    )
+    model = Model(config)
+
+    model.run(config.n_steps)
+
+    history = model.datacollector.get_model_vars_dataframe()
+    assert not history.isna().any().any()
+    assert model.environment.current_params["food_availability"] >= 0
+    assert config.environment.min_temperature <= model.environment.current_params["temperature"] <= config.environment.max_temperature
+    assert all(
+        (agent.genome >= 0.0).all() and (agent.genome <= 1.0).all()
+        for agent in model.agents
+    )
 
 
 def test_main_run_mode_executes_model_and_prints_optional_summaries(monkeypatch, capsys):
@@ -38,6 +94,7 @@ def test_main_run_mode_executes_model_and_prints_optional_summaries(monkeypatch,
 
         def run(self, n_steps):
             calls["run_steps"] = n_steps
+            return SimulationResult(RunStatus.COMPLETED, n_steps)
 
     monkeypatch.setattr(main_entry, "Model", StubModel)
 

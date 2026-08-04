@@ -44,7 +44,10 @@ def collect_history(model: Model, n_steps: int) -> pd.DataFrame:
     Population metrics are taken after each completed step, while environment
     metrics are recorded from the beginning of that step.
     """
-    rows: list[dict] = []
+    rows = [collect_history_row(model, model.environment.current_params.copy())]
+
+    if is_extinct(model):
+        return pd.DataFrame(rows)
 
     for _ in range(n_steps):
         env_before = model.environment.current_params.copy()

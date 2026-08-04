@@ -5,8 +5,15 @@ from pathlib import Path
 from hydra import compose, initialize_config_dir
 from hydra.core.global_hydra import GlobalHydra
 from omegaconf import OmegaConf
+import pytest
 
 from config.registry import register_configs
+from config.sim_config import (
+    EnvironmentConfig,
+    PopulationConfig,
+    SimConfig,
+    validate_sim_config,
+)
 
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
@@ -101,3 +108,20 @@ def test_compare_config_allows_nested_simulation_and_comparison_overrides():
     assert cfg.simulation.population.initial_size == 220
     assert cfg.retrain_steps == 25
     assert cfg.x_trait == "size"
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        SimConfig(environment=EnvironmentConfig(min_temperature=10, max_temperature=10)),
+        SimConfig(environment=EnvironmentConfig(temp_step=float("nan"))),
+        SimConfig(environment=EnvironmentConfig(food_availability=-1)),
+        SimConfig(population=PopulationConfig(genome_labels=["size"])),
+        SimConfig(population=PopulationConfig(mutation_std=-0.1)),
+        SimConfig(population=PopulationConfig(reproduction_rate=1.1)),
+        SimConfig(n_steps=-1),
+    ],
+)
+def test_validate_sim_config_rejects_invalid_values(config):
+    with pytest.raises(ValueError, match="Invalid simulation config"):
+        validate_sim_config(config)

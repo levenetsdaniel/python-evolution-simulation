@@ -84,10 +84,10 @@ def test_step_advances_params_and_snapshots_prev():
     assert env.prev_params["hazard_level"] == pytest.approx(0.1)
 
 
-def test_step_resets_temperature_when_max_reached():
+def test_step_reflects_temperature_at_max_boundary_without_a_jump():
     cfg = EnvironmentConfig(
         temp_start=49.99, temp_step=0.05,
-        max_temperature=50.0, temp_reset=-5.0,
+        max_temperature=50.0,
         food_availability=10000.0,
     )
     m = StubModel()
@@ -96,7 +96,30 @@ def test_step_resets_temperature_when_max_reached():
 
     env.step()
 
-    assert env.current_params["temperature"] == cfg.temp_reset
+    assert env.current_params["temperature"] == pytest.approx(49.96)
+
+    env.step()
+
+    assert env.current_params["temperature"] == pytest.approx(49.91)
+
+
+def test_step_reflects_hazard_level_at_probability_bounds():
+    cfg = EnvironmentConfig(
+        food_availability=10000.0,
+        hazard_level_start=0.98,
+        hazard_step=0.05,
+    )
+    m = StubModel()
+    env = Environment(m, config=cfg)
+    make_ind(m)
+
+    env.step()
+
+    assert env.current_params["hazard_level"] == pytest.approx(0.97)
+
+    env.step()
+
+    assert env.current_params["hazard_level"] == pytest.approx(0.92)
 
 def test_food_distribution_resets_food_eaten_at_start():
     m = StubModel()
@@ -109,6 +132,15 @@ def test_food_distribution_resets_food_eaten_at_start():
 
     assert a1.food_eaten == 0
     assert a2.food_eaten == 0
+
+
+def test_food_distribution_handles_empty_population():
+    m = StubModel()
+    env = Environment(m, config=EnvironmentConfig(food_availability=100.0))
+
+    env.food_distribution()
+
+    assert env.current_food == 0.0
 
 
 def test_food_distribution_depletes_current_food_but_preserves_capacity():
@@ -125,6 +157,29 @@ def test_food_distribution_depletes_current_food_but_preserves_capacity():
     assert env.current_food == pytest.approx(1000.0 - a1.food_need - a2.food_need)
     assert env.current_params["food_availability"] == 1000.0
     assert m.population.compete_calls == []
+
+
+def test_food_distribution_feeds_agent_when_food_exactly_matches_need():
+    m = StubModel()
+    agent = make_ind(m)
+    env = Environment(m, config=EnvironmentConfig(food_availability=agent.food_need))
+
+    env.food_distribution()
+
+    assert agent.food_eaten == agent.food_need
+    assert env.current_food == 0.0
+    assert m.population.compete_calls == []
+
+
+def test_step_clamps_declining_food_at_zero():
+    m = StubModel()
+    make_ind(m)
+    env = Environment(m, config=EnvironmentConfig(food_availability=1.0, food_step=-2.0))
+
+    env.step()
+
+    assert env.current_params["food_availability"] == 0.0
+    assert env.current_food == 0.0
 
 
 def test_food_distribution_resets_current_food_each_round():
