@@ -13,5 +13,10 @@ y_trait: cold_resistance
 view: false
 
 hydra:
+  run:
+    dir: artifacts/hydra/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: artifacts/hydra/multirun/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${hydra.job.num}
   job:
     chdir: false

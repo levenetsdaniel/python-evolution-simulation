@@ -6,7 +6,7 @@ defaults:
   - fitness@simulation_config.fitness: schema
   - _self_
 
-output_dir: reports
+output_dir: artifacts/profiling
 prof_filename: evosim.prof
 text_summary_filename: cprofile_summary.txt
 html_report_filename: profiling_report.html
@@ -17,5 +17,10 @@ top_n_console: 15
 view: false
 
 hydra:
+  run:
+    dir: artifacts/hydra/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: artifacts/hydra/multirun/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${hydra.job.num}
   job:
     chdir: false

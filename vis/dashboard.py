@@ -2,13 +2,17 @@
 
 from pathlib import Path
 
+from config.output_paths import COMPARISON_DASHBOARD_DIR
 from config.sim_config import ComparisonConfig
 from neural.comparison_runner import ComparisonRunner
 from .plots import build_animated_scatter, build_comparison_table
 from .snapshots import run_with_snapshots
 
 
-def build_dashboard(config: ComparisonConfig, out_dir: str | Path = "dashboard_output") -> Path:
+def build_dashboard(
+    config: ComparisonConfig,
+    out_dir: str | Path = COMPARISON_DASHBOARD_DIR,
+) -> Path:
     runner = ComparisonRunner(config)
 
     baseline_snaps, neural_snaps = run_with_snapshots(

@@ -48,9 +48,10 @@ evosim/
 │   └── report_template.html
 ├── tests/                   # pytest: fitness / individual / population / environment /
 │                            # training_buffer / advisor / trainer / mutation
-├── reports/                 # артефакты профилирования
+├── artifacts/               # все output-артефакты: plots / dashboards / profiling
 ├── config/
 │   ├── sim_config.py        # dataclass-схемы (Sim / Comparison / Profiler + подконфиги)
+│   ├── output_paths.py      # единая схема путей для всех артефактов
 │   ├── scenarios.py         # пресеты EnvironmentConfig
 │   ├── registry.py          # регистрация схем и сценариев в Hydra ConfigStore
 │   ├── sim_config.yaml      # дефолты для main.py
@@ -267,7 +268,7 @@ python3 comparison_run.py retrain_steps=25 shift_strength=0.9
 python3 main.py n_steps=50 debug=true population_info=true individual_info=true
 ```
 
-Базовая визуализация (Plotly-графики в `vis/graphics/`):
+Базовая визуализация (Plotly-графики в `artifacts/plots/demo/`):
 
 ```bash
 python3 vis/vis_demo.py
@@ -282,6 +283,9 @@ python3 comparison_run.py view=true
 python3 comparison_run.py view=true simulation.environment=warming simulation.seed=7
 python3 comparison_run.py view=true simulation.environment=harsh_seasons simulation.population.initial_size=200 simulation.n_steps=1200
 ```
+
+Файл дашборда сохраняется в `artifacts/dashboards/comparison/dashboard.html`.
+
 ### Что внутри
 
 - **Animated scatter (heat × cold).** Каждая точка — особь на двумерной проекции пространства признаков (по умолчанию `heat_resistance × cold_resistance`); цвет точки кодирует fitness (синяя гамма — baseline, красная — neural-guided). Внизу — кнопки play/pause и слайдер по поколениям для покадрового просмотра.
@@ -304,9 +308,21 @@ python3 comparison_run.py view=true simulation.environment=warming x_trait=heat_
 
 ---
 
+## Артефакты вывода
+
+Все сценарии теперь складывают output в единый корень `artifacts/`:
+
+| Каталог | Что появляется |
+|---|---|
+| `artifacts/plots/simulation/` | Plotly-графики из `python3 main.py view=true` |
+| `artifacts/plots/demo/` | Plotly-графики из `python3 vis/vis_demo.py` |
+| `artifacts/dashboards/comparison/` | `dashboard.html` из `python3 comparison_run.py view=true` |
+| `artifacts/profiling/` | `.prof`, текстовая сводка и HTML-отчёт профайлера |
+| `artifacts/hydra/` | служебные метаданные Hydra для одиночных и batch-запусков |
+
 ## Профилирование
 
-Профайлер прогоняет симуляцию под `cProfile` и собирает три артефакта в каталоге `reports/`:
+Профайлер прогоняет симуляцию под `cProfile` и собирает три артефакта в каталоге `artifacts/profiling/`:
 
 | Файл | Назначение |
 |---|---|
@@ -329,7 +345,7 @@ python3 profile_run.py simulation_config.population.initial_size=300 top_n_flame
 | Ключ | Тип | По умолчанию | Описание |
 |---|---|---|---|
 | `simulation_config` | `SimConfig` | дефолты | Конфиг прогоняемой симуляции |
-| `output_dir` | str | `reports` | Каталог для всех артефактов |
+| `output_dir` | str | `artifacts/profiling` | Каталог для всех артефактов |
 | `prof_filename` | str | `evosim.prof` | Имя `.prof` дампа |
 | `text_summary_filename` | str | `cprofile_summary.txt` | Имя текстовой сводки |
 | `html_report_filename` | str | `profiling_report.html` | Имя HTML-отчёта |

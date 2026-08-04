@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+from .output_paths import PROFILING_DIR
+
 
 @dataclass
 class EnvironmentConfig:
@@ -95,7 +97,7 @@ class ProfilerConfig:
 
     simulation_config: SimConfig = field(default_factory=SimConfig)
 
-    output_dir: str = "reports"
+    output_dir: str = str(PROFILING_DIR)
     prof_filename: str = "evosim.prof"
     text_summary_filename: str = "cprofile_summary.txt"
     html_report_filename: str = "profiling_report.html"

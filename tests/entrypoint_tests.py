@@ -7,6 +7,7 @@ from omegaconf import OmegaConf
 
 import comparison_run
 import main as main_entry
+from config.output_paths import SIMULATION_PLOTS_DIR
 from config.sim_config import ComparisonConfig, SimConfig
 from core.model import Model
 
@@ -76,7 +77,7 @@ def test_main_view_mode_builds_and_saves_figures(monkeypatch):
         calls["build_figures"] = history
         return {"figure": object()}
 
-    def fake_save_figures(figures, output_dir="artifacts"):
+    def fake_save_figures(figures, output_dir=str(SIMULATION_PLOTS_DIR)):
         calls["save_figures"] = (figures, output_dir)
 
     monkeypatch.setattr(main_entry, "Model", StubModel)
@@ -88,7 +89,7 @@ def test_main_view_mode_builds_and_saves_figures(monkeypatch):
     main_entry.main.__wrapped__(cfg)
 
     assert calls["collect_history"][1] == 8
-    assert calls["save_figures"][1] == "artifacts"
+    assert calls["save_figures"][1] == str(SIMULATION_PLOTS_DIR)
 
 
 def test_comparison_run_executes_runner(monkeypatch):

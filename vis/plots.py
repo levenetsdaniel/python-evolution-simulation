@@ -5,6 +5,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 
+from config.output_paths import SIMULATION_PLOTS_DIR
+
 def _build_group_figure(
     history_df: pd.DataFrame,
     title: str,
@@ -109,7 +111,10 @@ def build_all_figures(history_df: pd.DataFrame) -> dict[str, go.Figure]:
     }
     return figures
 
-def save_figures(figures: dict[str, go.Figure], output_dir: str | Path = "artifacts") -> None:
+def save_figures(
+    figures: dict[str, go.Figure],
+    output_dir: str | Path = SIMULATION_PLOTS_DIR,
+) -> None:
     """Save all figures as separate HTML files."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

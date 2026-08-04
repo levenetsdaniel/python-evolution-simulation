@@ -6,8 +6,4 @@ catboost_info/
 *.cbm
 models/*.cbm
 .benchmarks/
-graphics/
-reports/
-outputs/
-dashboard_output/
 /artifacts
