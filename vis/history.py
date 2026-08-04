@@ -3,7 +3,7 @@ import pandas as pd
 from core.model import Model
 
 
-def _is_extinct(model: Model) -> bool:
+def is_extinct(model: Model) -> bool:
     """Return True if the simulation can no longer continue."""
     if len(model.agents) == 0:
         return True

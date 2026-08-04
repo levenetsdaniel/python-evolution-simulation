@@ -5,6 +5,8 @@ from config.sim_config import IndividualConfig
 from .enums import Gender, DeathCause
 from .fitness import fitness
 
+DEFAULT_INDIVIDUAL_CONFIG = IndividualConfig()
+
 
 class Individual(mesa.Agent):
     """
@@ -36,7 +38,8 @@ class Individual(mesa.Agent):
         """
 
         super().__init__(model)
-        self.config = IndividualConfig()
+        model_config = getattr(self.model, "config", None)
+        self.config = getattr(model_config, "individual", None) or DEFAULT_INDIVIDUAL_CONFIG
         self.genome = np.array(genome, dtype=float)
         self.genome_labels = genome_labels
         self.parent_ids = parent_ids
@@ -88,7 +91,15 @@ class Individual(mesa.Agent):
 
         ind_params = self.genes_map.copy()
         ind_params["satiation"] = self.satiation
-        return fitness(ind_params, self.model.environment.current_params)
+        model_config = getattr(self.model, "config", None)
+        fitness_config = getattr(model_config, "fitness", None)
+        environment_config = getattr(model_config, "environment", None)
+        return fitness(
+            ind_params,
+            self.model.environment.current_params,
+            fitness_config=fitness_config,
+            environment_config=environment_config,
+        )
 
     def step(self):
         """

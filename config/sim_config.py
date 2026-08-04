@@ -6,12 +6,10 @@ class EnvironmentConfig:
     """Parameters controlling the environment."""
 
     food_availability: float = 10000.0
+    food_step: float = 0.0
     temp_start: float = 20.0
     temp_step: float = 0.05
     temp_reset: float = -5.0
-    optimum_temp_start: float = 0.625
-    optimum_temp_step: float = 0.00125
-    optimum_temp_reset: float = 0.1
     hazard_level_start: float = 0.1
     hazard_step: float = 0.001
     min_temperature: float = -30.0
@@ -68,14 +66,20 @@ class SimConfig:
     environment: EnvironmentConfig = field(default_factory=EnvironmentConfig)
     population: PopulationConfig = field(default_factory=PopulationConfig)
     individual: IndividualConfig = field(default_factory=IndividualConfig)
+    fitness: FitnessConfig = field(default_factory=FitnessConfig)
     n_steps: int = 600
+    retrain_steps: int = 50
     seed: int = 42
     output_path: str = "data/training_samples.json"
     steps_info: int = 5
+    shift_strength: float = 0.7
     model_info: bool = False
     population_info: bool = False
     individual_info: bool = False
     record: bool = False
+    x_trait: str = "heat_resistance"
+    y_trait: str = "cold_resistance"
+    view: bool = False
     debug: bool = False
 
 @dataclass

@@ -20,6 +20,9 @@ TEST_FILES = [
     "tests/population_tests.py",
     "tests/environment_tests.py",
     "tests/training_buffer_tests.py",
+    "tests/advisor_tests.py",
+    "tests/trainer_tests.py",
+    "tests/mutation_tests.py"
 ]
 
 

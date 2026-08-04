@@ -10,6 +10,7 @@ from config.sim_config import PopulationConfig
 from core.enums import DeathCause, Gender
 from core.individual import Individual
 from core.population import Population
+from core.mutation_patterns import BaselineMutation
 
 LABELS = PopulationConfig().genome_labels
 N = len(LABELS)
@@ -48,6 +49,7 @@ class StubModel(mesa.Model):
         self.training_buffer = _RecordingBuffer()
         self.births_this_step = 0
         self.deaths_this_step = {dc: 0 for dc in DeathCause}
+        self.mutation_strategy = BaselineMutation(PopulationConfig().mutation_std)
 
 
 class _StubRNG:

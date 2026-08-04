@@ -37,7 +37,6 @@ class Environment:
         self.time = 0
         self.current_params = {
             "temperature": self.config.temp_start,
-            "optimum_temperature": self.config.optimum_temp_start,
             "food_availability": self.config.food_availability,
             "hazard_level": self.config.hazard_level_start,
         }
@@ -90,14 +89,21 @@ class Environment:
         self.prev_params = self.current_params.copy()
         self.time += 1
 
+        self.current_params["food_availability"] += self.config.food_step
+        if self.current_params["food_availability"] < 0:
+            self.current_params["food_availability"] = self.config.food_step
         self.current_food = self.current_params["food_availability"]
+
         self.current_params["temperature"] += self.config.temp_step
-        self.current_params["optimum_temperature"] += self.config.optimum_temp_step
         if self.current_params["temperature"] >= self.config.max_temperature:
             self.current_params["temperature"] = self.config.temp_reset
-            self.current_params["optimum_temperature"] = self.config.optimum_temp_reset
+
+        if self.current_params["temperature"] <= self.config.min_temperature:
+            self.current_params["temperature"] = self.config.temp_reset
 
         self.current_params["hazard_level"] += self.config.hazard_step
+        if self.current_params["hazard_level"] < 0 or self.current_params["hazard_level"] > 1:
+            self.current_params["hazard_level"] = self.config.hazard_level_start
 
 
 

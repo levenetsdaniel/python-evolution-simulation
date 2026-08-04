@@ -22,7 +22,7 @@ MAX_FOOD = ECFG.food_availability
 def _record_simple(buf, child_id=1, *, env_params=None, env_delta=None,
                    pop_mean_genome=None, pre_genome=None, deltas=None,
                    p1_fitness=0.4, p2_fitness=0.6, pop_mean_fitness=0.5):
-    """Helper: feed record_birth with sensible defaults."""
+    """Feed record_birth with sensible defaults."""
     buf.record_birth(
         child_id=child_id,
         pre_mutation_genome=pre_genome if pre_genome is not None else np.full(N, 0.5),
@@ -62,8 +62,6 @@ def test_record_fitness_finalizes_into_samples_with_improvement():
 
 
 def test_record_fitness_for_unknown_id_is_silent():
-    """The simulation may call record_fitness for randomly-init agents that
-    never went through record_birth. It must not crash or pollute samples."""
     buf = TrainingBuffer()
     buf.record_fitness(999, child_fitness=0.5)
 

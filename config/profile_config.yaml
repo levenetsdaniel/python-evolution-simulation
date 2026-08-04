@@ -1,0 +1,21 @@
+defaults:
+  - profiler_schema
+  - environment@simulation_config.environment: default
+  - population@simulation_config.population: schema
+  - individual@simulation_config.individual: schema
+  - fitness@simulation_config.fitness: schema
+  - _self_
+
+output_dir: reports
+prof_filename: evosim.prof
+text_summary_filename: cprofile_summary.txt
+html_report_filename: profiling_report.html
+top_n_text: 50
+top_n_callers: 10
+top_n_flame: 15
+top_n_console: 15
+view: false
+
+hydra:
+  job:
+    chdir: false
