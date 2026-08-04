@@ -26,6 +26,7 @@ evosim/
 │   ├── environment.py       # среда: температура, пища, распределение ресурса
 │   ├── fitness.py           # функции фитнеса (temp / energy / hazard / proportion)
 │   ├── mutation_patterns.py # стратегии мутации ядра симуляции
+│   ├── recording.py         # protocol для внешнего recorder без знания о ML
 │   └── enums.py             # DeathCause, Gender
 ├── neural/
 │   ├── comparison_runner.py # orchestration baseline vs ML-guided comparison
@@ -49,10 +50,11 @@ evosim/
 │                            # training_buffer / advisor / trainer / mutation
 ├── reports/                 # артефакты профилирования
 ├── config/
-│   ├── sim_config.py        # dataclass-схемы (Sim / Environment / Population / Individual / Fitness / Profiler)
+│   ├── sim_config.py        # dataclass-схемы (Sim / Comparison / Profiler + подконфиги)
 │   ├── scenarios.py         # пресеты EnvironmentConfig
 │   ├── registry.py          # регистрация схем и сценариев в Hydra ConfigStore
 │   ├── sim_config.yaml      # дефолты для main.py
+│   ├── compare_config.yaml  # дефолты для comparison_run.py
 │   └── profile_config.yaml  # дефолты для profile_run.py
 ├── main.py                  # основной запуск чистой симуляции
 ├── comparison_run.py        # baseline + neural-guided comparison pipeline
@@ -113,14 +115,14 @@ pip install -r requirements.txt
 | `python3 comparison_run.py` | ML-guided comparison pipeline: обучает советчика на baseline-буфере и запускает обе ветви (baseline + neural-guided). С `view=true` собирает сравнительный дашборд. |
 | `python3 profile_run.py` | Прогон симуляции под `cProfile` |
 | `python3 vis/vis_demo.py` | Сохраняет базовый набор Plotly-графиков по одиночному прогону |
-| `python3 vis/dashboard.py` | Прямой сбор дашборда с дефолтным `SimConfig` (без CLI-override) |
+| `python3 vis/dashboard.py` | Прямой сбор comparison dashboard с дефолтным `ComparisonConfig` |
 | `python3 tests_run.py` | Запуск всего тестового набора |
 
 ---
 
 ## Конфигурация
 
-Все параметры описаны как dataclass-схемы в `config/sim_config.py` и зарегистрированы в Hydra ConfigStore (`config/registry.py`). Дефолтные значения берутся из dataclass; YAML-файлы (`config/sim_config.yaml`, `config/profile_config.yaml`) задают стартовый профиль; всё остальное переопределяется из CLI в стиле Hydra:
+Все параметры описаны как dataclass-схемы в `config/sim_config.py` и зарегистрированы в Hydra ConfigStore (`config/registry.py`). Дефолтные значения берутся из dataclass; YAML-файлы `config/sim_config.yaml`, `config/compare_config.yaml` и `config/profile_config.yaml` задают стартовые профили; всё остальное переопределяется из CLI в стиле Hydra:
 
 ```bash
 python3 main.py n_steps=200 seed=7
@@ -141,6 +143,19 @@ python3 main.py --help                     # полный список пара�
 | `steps_info` | int | `5` | Сколько последних шагов показать в `model_info` |
 | `population_info` | bool | `false` | Сводка по популяции (`main.py`) |
 | `individual_info` | bool | `false` | Сводка по агентам (`main.py`) |
+
+### `ComparisonConfig`
+
+Используется только в `comparison_run.py` и для comparison dashboard.
+
+| Ключ | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `simulation` | `SimConfig` | дефолты | Базовый конфиг обеих веток comparison pipeline |
+| `retrain_steps` | int | `50` | Период переобучения советчика по baseline-буферу |
+| `shift_strength` | float | `0.7` | Сила сдвига генома в guided mutation |
+| `x_trait` | str | `heat_resistance` | Ось X для animated scatter comparison dashboard |
+| `y_trait` | str | `cold_resistance` | Ось Y для animated scatter comparison dashboard |
+| `view` | bool | `false` | В `comparison_run.py` — собрать и сохранить comparison dashboard вместо обычного прогона |
 
 ### `environment` (`EnvironmentConfig`)
 
@@ -238,9 +253,13 @@ python3 main.py environment=harsh_seasons population.initial_size=200 n_steps=12
 python3 main.py n_steps=200 model_info=true
 ```
 
-Сбор обучающей выборки для нейросоветчика:
+Сравнительный ML-guided запуск:
 
-Сравнительный ML-guided запуск теперь вынесен в `comparison_run.py`.
+```bash
+python3 comparison_run.py
+python3 comparison_run.py simulation.environment=warming
+python3 comparison_run.py retrain_steps=25 shift_strength=0.9
+```
 
 Полный дебаг-прогон с пошаговыми логами:
 
@@ -259,9 +278,9 @@ python3 vis/vis_demo.py
 ## Сравнительный дашборд
 
 ```bash
-python3 main.py view=true
-python3 main.py view=true environment=warming seed=7
-python3 main.py view=true environment=harsh_seasons population.initial_size=200 n_steps=1200
+python3 comparison_run.py view=true
+python3 comparison_run.py view=true simulation.environment=warming simulation.seed=7
+python3 comparison_run.py view=true simulation.environment=harsh_seasons simulation.population.initial_size=200 simulation.n_steps=1200
 ```
 ### Что внутри
 
@@ -276,11 +295,11 @@ python3 main.py view=true environment=harsh_seasons population.initial_size=200 
 
 ### Ось проекции
 
-В animated scatter оси задаются через параметры `x_trait` и `y_trait` в `SimConfig` (по умолчанию — `heat_resistance × cold_resistance`). Любое имя из `population.genome_labels` валидно:
+В animated scatter оси задаются через параметры `x_trait` и `y_trait` в `ComparisonConfig` (по умолчанию — `heat_resistance × cold_resistance`). Любое имя из `population.genome_labels` валидно:
 
 ```bash
-python3 main.py view=true x_trait=size y_trait=speed
-python3 main.py view=true environment=warming x_trait=heat_resistance y_trait=metabolic_rate
+python3 comparison_run.py view=true x_trait=size y_trait=speed
+python3 comparison_run.py view=true simulation.environment=warming x_trait=heat_resistance y_trait=metabolic_rate
 ```
 
 ---

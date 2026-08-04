@@ -16,6 +16,7 @@ PROJECT_ROOT = Path(__file__).parent.resolve()
 
 TEST_FILES = [
     "tests/config_tests.py",
+    "tests/entrypoint_tests.py",
     "tests/fitness_tests.py",
     "tests/individual_tests.py",
     "tests/population_tests.py",
