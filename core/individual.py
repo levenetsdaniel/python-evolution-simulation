@@ -58,6 +58,7 @@ class Individual(mesa.Agent):
                                            self.genes_map["resilience"] * self.config.food_need_resilience_coef +
                                            self.genes_map["speed"] * self.config.food_need_speed_coef +
                                            self.genes_map["aggressiveness"] * self.config.food_need_aggr_coef) * 10)))
+        self.energy = self.config.energy_initial
         self.fitness = None
         self.is_alive = True
 
@@ -76,14 +77,32 @@ class Individual(mesa.Agent):
 
     @property
     def satiation(self) -> float:
-        """
-        Compute current satiation level.
+        """Return the normalized energy reserve used for survival and reproduction."""
 
-        Returns:
-        Ratio of consumed food to required food.
-        """
+        return self.energy / self.config.energy_capacity
+
+    @property
+    def food_satiation(self) -> float:
+        """Return the fraction of this step's food requirement that was met."""
 
         return min(1.0, self.food_eaten / self.food_need)
+
+    def spend_energy(self, amount: float) -> None:
+        """Spend energy without letting the reserve become negative."""
+        self.energy = max(0.0, self.energy - amount)
+
+    def _update_energy(self) -> None:
+        """Convert consumed food into energy and pay this step's metabolic costs."""
+        self.energy = min(
+            self.config.energy_capacity,
+            self.energy + self.food_eaten * self.config.food_energy_conversion,
+        )
+        metabolic_cost = (
+            self.config.basal_energy_cost
+            + self["speed"] * self.config.speed_energy_cost
+            + self["aggressiveness"] * self.config.aggressiveness_energy_cost
+        )
+        self.spend_energy(metabolic_cost)
 
     def compute_fitness(self) -> float:
         """
@@ -115,6 +134,7 @@ class Individual(mesa.Agent):
         if not self.is_alive:
             return
 
+        self._update_energy()
         self.fitness = self.compute_fitness()
         recorder = getattr(self.model, "recorder", None)
         if recorder is not None:

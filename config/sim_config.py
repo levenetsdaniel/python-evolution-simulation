@@ -9,7 +9,7 @@ class EnvironmentConfig:
     """Parameters controlling the environment."""
 
     food_availability: float = 10000.0
-    food_step: float = 0.0
+    food_regeneration_rate: float = 1.0
     temp_start: float = 20.0
     temp_step: float = 0.05
     hazard_level_start: float = 0.1
@@ -30,6 +30,10 @@ class PopulationConfig:
     reproduction_rate: float = 0.4
     min_reproduction_age: int = 2
     wound_base: float = 0.4
+    attack_base_probability: float = 0.05
+    attack_risk_aversion: float = 0.6
+    attack_energy_cost: float = 2.0
+    reproduction_energy_cost: float = 15.0
 
 
 @dataclass
@@ -44,6 +48,12 @@ class IndividualConfig:
     food_need_resilience_coef: float = 2.0
     food_need_speed_coef: float = 1.0
     food_need_aggr_coef: float = 10.0
+    energy_capacity: float = 100.0
+    energy_initial: float = 70.0
+    food_energy_conversion: float = 0.5
+    basal_energy_cost: float = 1.0
+    speed_energy_cost: float = 2.0
+    aggressiveness_energy_cost: float = 3.0
 
 
 @dataclass
@@ -119,6 +129,10 @@ def validate_sim_config(config: SimConfig) -> None:
 
     _require(environment.min_temperature < environment.max_temperature, "min_temperature must be below max_temperature")
     _require(environment.food_availability >= 0, "food_availability must be non-negative")
+    _require(
+        0 <= environment.food_regeneration_rate <= 1,
+        "food_regeneration_rate must be in [0, 1]",
+    )
     _require(0 <= environment.hazard_level_start <= 1, "hazard_level_start must be in [0, 1]")
 
     required_labels = {
@@ -139,6 +153,16 @@ def validate_sim_config(config: SimConfig) -> None:
     _require(0 <= population.reproduction_rate <= 1, "reproduction_rate must be in [0, 1]")
     _require(population.min_reproduction_age >= 0, "min_reproduction_age must be non-negative")
     _require(0 <= population.wound_base <= 1, "wound_base must be in [0, 1]")
+    _require(
+        0 <= population.attack_base_probability <= 1,
+        "attack_base_probability must be in [0, 1]",
+    )
+    _require(
+        0 <= population.attack_risk_aversion <= 1,
+        "attack_risk_aversion must be in [0, 1]",
+    )
+    _require(population.attack_energy_cost >= 0, "attack_energy_cost must be non-negative")
+    _require(population.reproduction_energy_cost >= 0, "reproduction_energy_cost must be non-negative")
 
     _require(0 <= individual.fitness_death_threshold <= 1, "fitness_death_threshold must be in [0, 1]")
     _require(0 <= individual.fitness_death_prob_coef <= 1, "fitness_death_prob_coef must be in [0, 1]")
@@ -152,9 +176,18 @@ def validate_sim_config(config: SimConfig) -> None:
                 individual.food_need_resilience_coef,
                 individual.food_need_speed_coef,
                 individual.food_need_aggr_coef,
+                individual.food_energy_conversion,
+                individual.basal_energy_cost,
+                individual.speed_energy_cost,
+                individual.aggressiveness_energy_cost,
             )
         ),
         "food need coefficients must be non-negative",
+    )
+    _require(individual.energy_capacity > 0, "energy_capacity must be positive")
+    _require(
+        0 <= individual.energy_initial <= individual.energy_capacity,
+        "energy_initial must be in [0, energy_capacity]",
     )
 
     _require(0 <= fitness.temp_20_norm <= 1, "temp_20_norm must be in [0, 1]")

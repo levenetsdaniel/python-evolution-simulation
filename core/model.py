@@ -62,15 +62,29 @@ class Model(mesa.Model):
         self.deaths_this_step = {DeathCause.AGE: 0, DeathCause.FITNESS: 0, DeathCause.THRESHOLD: 0,
                                  DeathCause.COMPETITION: 0}
         self.births_this_step = 0
+        self.attacks_this_step = {
+            "considered": 0,
+            "declined": 0,
+            "started": 0,
+            "lost": 0,
+            "won": 0,
+            "food_stolen": 0,
+            "energy_spent": 0.0,
+        }
         self.datacollector = mesa.DataCollector(
             model_reporters={
                 "Step": lambda m: m.step_count,
                 "Generation": lambda m: m.population.generation,
                 "PopulationSize": lambda m: m.population.actual_pop_size,
+                "FemaleCount": lambda m: m.population.count_females,
+                "MaleCount": lambda m: m.population.count_males,
+                "FoodCapacity": lambda m: m.environment.food_capacity,
+                "FoodAvailable": lambda m: m.environment.current_food,
 
                 "AvgFitness": lambda m: m.population.avg_fitness,
                 "AvgAge": lambda m: m.population.avg_age,
                 "AvgSatiation": lambda m: m.population.avg_satiation,
+                "AvgEnergy": lambda m: m.population.avg_energy,
                 "AvgHeatResistance": lambda m: m.population.avg_heat_resistance,
                 "AvgColdResistance": lambda m: m.population.avg_cold_resistance,
                 "AvgMetabolicRate": lambda m: m.population.avg_metabolic_rate,
@@ -86,11 +100,21 @@ class Model(mesa.Model):
                 "Deaths_threshold": lambda m: m.deaths_this_step[DeathCause.THRESHOLD],
                 "Deaths_competition": lambda m: m.deaths_this_step[DeathCause.COMPETITION],
                 "Deaths_total": lambda m: sum(m.deaths_this_step.values()),
+                "PopulationDelta": lambda m: m.births_this_step - sum(m.deaths_this_step.values()),
+
+                "AttacksConsidered": lambda m: m.attacks_this_step["considered"],
+                "AttacksDeclined": lambda m: m.attacks_this_step["declined"],
+                "AttacksStarted": lambda m: m.attacks_this_step["started"],
+                "AttacksLost": lambda m: m.attacks_this_step["lost"],
+                "AttacksWon": lambda m: m.attacks_this_step["won"],
+                "FoodStolen": lambda m: m.attacks_this_step["food_stolen"],
+                "AttackEnergySpent": lambda m: m.attacks_this_step["energy_spent"],
             },
 
             agent_reporters={
                 "Fitness": "fitness",
                 "Age": "age",
+                "Energy": "energy",
             }
         )
 
@@ -104,9 +128,13 @@ class Model(mesa.Model):
 
         print("HazardLevel", float(self.environment.current_params["hazard_level"]))
 
-        print("FoodCount", float(self.environment.current_params["food_availability"]))
+        print("FoodCapacity", float(self.environment.food_capacity))
+
+        print("FoodAvailable", float(self.environment.current_food))
 
         print("AvgFitness", float(self.datacollector.model_reporters["AvgFitness"](self)))
+
+        print("AvgEnergy", self.population.avg_energy)
 
         print("AvgHeatResistance", self.population.avg_heat_resistance)
 
@@ -130,6 +158,8 @@ class Model(mesa.Model):
         self.births_this_step = 0
         for key in self.deaths_this_step:
             self.deaths_this_step[key] = 0
+        for key in self.attacks_this_step:
+            self.attacks_this_step[key] = 0
 
         self.environment.step()
         self.population.step()

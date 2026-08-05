@@ -69,8 +69,13 @@ class Population:
 
     @property
     def avg_satiation(self) -> np.floating:
-        """Compute average satiation of alive individuals."""
+        """Compute average normalized energy reserve of alive individuals."""
         return self._mean_alive(lambda agent: agent.satiation)
+
+    @property
+    def avg_energy(self) -> np.floating:
+        """Compute average absolute energy reserve of alive individuals."""
+        return self._mean_alive(lambda agent: agent.energy)
 
     @property
     def avg_heat_resistance(self) -> np.floating:
@@ -166,6 +171,7 @@ class Population:
         for attacker in hungry:
             while fed and attacker.food_eaten < attacker.food_need:
                 victim = self.model.rng.choice(fed)
+                self.model.attacks_this_step["considered"] += 1
 
                 a_power = attacker["size"] + attacker["aggressiveness"]
                 v_power = victim["size"] + victim["aggressiveness"]
@@ -178,7 +184,16 @@ class Population:
                     win_prob = a_power / total
                     power_diff = (a_power - v_power) / total
 
+                if self.model.rng.random() >= self._attack_probability(attacker, victim, win_prob):
+                    self.model.attacks_this_step["declined"] += 1
+                    break
+
+                energy_cost = min(attacker.energy, self.config.attack_energy_cost)
+                attacker.spend_energy(energy_cost)
+                self.model.attacks_this_step["started"] += 1
+                self.model.attacks_this_step["energy_spent"] += energy_cost
                 if self.model.rng.random() >= win_prob:
+                    self.model.attacks_this_step["lost"] += 1
                     break
 
                 steal_coef = np.clip(0.5 + 0.5 * power_diff, 0.1, 0.9)
@@ -192,6 +207,8 @@ class Population:
 
                 victim.food_eaten -= stolen
                 attacker.food_eaten += stolen
+                self.model.attacks_this_step["won"] += 1
+                self.model.attacks_this_step["food_stolen"] += stolen
 
                 self._death_prob(victim, power_diff)
                 if not victim.is_alive or victim.food_eaten == 0:
@@ -244,7 +261,9 @@ class Population:
         """
 
         females = list(a for a in self.model.agents if
-                       a.is_alive and a.fitness is not None and a.gender == Gender.FEMALE and a.age >= self.config.min_reproduction_age)
+                       a.is_alive and a.fitness is not None and a.gender == Gender.FEMALE
+                       and a.age >= self.config.min_reproduction_age
+                       and a.energy >= self.config.reproduction_energy_cost)
 
         males = list(a for a in self.model.agents if
                      a.is_alive and a.fitness is not None and a.gender == Gender.MALE and a.age >= self.config.min_reproduction_age)
@@ -279,8 +298,24 @@ class Population:
 
             self.model.agents.add(child)
             self.model.births_this_step += 1
+            p1.spend_energy(self.config.reproduction_energy_cost)
 
             self.record_birth(child.unique_id, p1, p2, pre_mutation_genome, mutation_deltas)
+
+    def _attack_probability(self, attacker: Individual, victim: Individual, win_probability: float) -> float:
+        """Estimate whether a hungry individual accepts a risky attack."""
+        remaining_need = attacker.food_need - attacker.food_eaten
+        expected_food = min(victim.food_eaten, remaining_need) / attacker.food_need
+        hunger = 1.0 - attacker.satiation
+        risk = (1.0 - win_probability) * (1.0 - attacker["resilience"])
+        aggression_drive = self.config.attack_base_probability + (
+            1.0 - self.config.attack_base_probability
+        ) * attacker["aggressiveness"]
+
+        probability = aggression_drive * (0.2 + 0.8 * hunger) * expected_food
+        probability *= 1.0 - self.config.attack_risk_aversion * risk
+
+        return float(np.clip(probability, 0.0, 1.0))
 
     @staticmethod
     def _selection_weights(candidates: list[Individual]) -> np.ndarray:

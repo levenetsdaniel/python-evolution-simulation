@@ -15,6 +15,7 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     "default": EnvironmentConfig(),
     "stable": EnvironmentConfig(
         food_availability=10000.0,
+        food_regeneration_rate=1.0,
         temp_start=20.0,
         temp_step=0.0,
         hazard_level_start=0.1,
@@ -22,6 +23,7 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     ),
     "warming": EnvironmentConfig(
         food_availability=10000.0,
+        food_regeneration_rate=0.85,
         temp_start=-15.0,
         temp_step=0.1,
         hazard_level_start=0.1,
@@ -29,7 +31,7 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     ),
     "ice_age": EnvironmentConfig(
         food_availability=7000.0,
-        food_step=-10.0,
+        food_regeneration_rate=0.45,
         temp_start=30.0,
         temp_step=-0.08,
         hazard_level_start=0.1,
@@ -37,6 +39,7 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     ),
     "harsh_seasons": EnvironmentConfig(
         food_availability=10000.0,
+        food_regeneration_rate=0.65,
         temp_start=20.0,
         temp_step=0.4,
         hazard_level_start=0.1,
@@ -44,7 +47,7 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     ),
     "famine": EnvironmentConfig(
         food_availability=2500.0,
-        food_step=-5.0,
+        food_regeneration_rate=0.15,
         temp_start=20.0,
         temp_step=0.05,
         hazard_level_start=0.1,
@@ -52,6 +55,7 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     ),
     "hazardous": EnvironmentConfig(
         food_availability=10000.0,
+        food_regeneration_rate=0.85,
         temp_start=20.0,
         temp_step=0.05,
         hazard_level_start=0.2,
@@ -59,6 +63,7 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     ),
     "chaos": EnvironmentConfig(
         food_availability=4000.0,
+        food_regeneration_rate=0.3,
         temp_start=10.0,
         temp_step=0.3,
         hazard_level_start=0.2,

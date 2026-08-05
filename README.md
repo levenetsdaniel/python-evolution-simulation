@@ -112,7 +112,7 @@ pip install -r requirements.txt
 
 | Скрипт | Что делает |
 |---|---|
-| `python3 main.py` | Основной прогон чистой симуляции. С `view=true` сохраняет базовый набор графиков по одной ветке; с `model_info`, `population_info`, `individual_info` печатает диагностические сводки. |
+| `python3 main.py` | Основной прогон чистой симуляции. С `view=true` сохраняет графики состояния среды, энергии, демографии, причин смертей, прироста популяции и атак по одной ветке; с `model_info`, `population_info`, `individual_info` печатает диагностические сводки. |
 | `python3 comparison_run.py` | ML-guided comparison pipeline: обучает советчика на baseline-буфере и запускает обе ветви (baseline + neural-guided). С `view=true` собирает сравнительный дашборд. |
 | `python3 profile_run.py` | Прогон симуляции под `cProfile` |
 | `python3 vis/vis_demo.py` | Сохраняет базовый набор Plotly-графиков по одиночному прогону |
@@ -129,6 +129,7 @@ pip install -r requirements.txt
 python3 main.py n_steps=200 seed=7
 python3 main.py population.initial_size=300 environment.temp_start=10
 python3 main.py environment=warming        # выбор сценария (см. ниже)
+python3 main.py environment.food_regeneration_rate=0.25
 python3 main.py --help                     # полный список параметров
 ```
 
@@ -162,8 +163,8 @@ python3 main.py --help                     # полный список пара�
 
 | Ключ | Тип | По умолчанию | Описание |
 |---|---|---|---|
-| `food_availability` | float | `10000.0` | Пищевой ресурс на шаг |
-| `food_step` | float | `0.0` | Изменение пищевой базы за шаг |
+| `food_availability` | float | `10000.0` | Ёмкость пищевой базы |
+| `food_regeneration_rate` | float | `1.0` | Доля дефицита пищи, восстанавливаемая за шаг; `1.0` полностью восполняет ресурс |
 | `temp_start` | float | `20.0` | Стартовая температура (°C) |
 | `temp_step` | float | `0.05` | Изменение температуры за шаг; на границах диапазона направление меняется плавно |
 | `hazard_level_start` | float | `0.1` | Стартовый уровень опасности |
@@ -177,9 +178,13 @@ python3 main.py --help                     # полный список пара�
 |---|---|---|-------------------------------------------------------|
 | `initial_size` | int | `100` | Начальный размер популяции                            |
 | `mutation_std` | float | `0.12` | Стандартное отклонение baseline-мутации               |
-| `reproduction_rate` | float | `0.4` | Вероятность рождения потомка полностью сытой самкой за шаг |
+| `reproduction_rate` | float | `0.4` | Вероятность рождения потомка самкой с полным запасом энергии за шаг |
 | `min_reproduction_age` | int | `2` | Минимальный возраст для размножения                   |
 | `wound_base` | float | `0.4` | Базовая вероятность смерти проигравшего в конкуренции |
+| `attack_base_probability` | float | `0.05` | Базовая готовность голодной особи вступить в конфликт |
+| `attack_risk_aversion` | float | `0.6` | Насколько риск проигрыша снижает вероятность атаки |
+| `attack_energy_cost` | float | `2.0` | Энергия, расходуемая на одну начатую атаку |
+| `reproduction_energy_cost` | float | `15.0` | Энергия, расходуемая матерью при рождении потомка |
 | `genome_labels` | list[str] | 7 признаков | Названия генов                                        |
 
 ### `individual` (`IndividualConfig`)
@@ -194,6 +199,12 @@ python3 main.py --help                     # полный список пара�
 | `food_need_resilience_coef` | float | `2.0` | Вклад `resilience` в потребность в пище |
 | `food_need_speed_coef` | float | `1.0` | Вклад `speed` в потребность в пище |
 | `food_need_aggr_coef` | float | `10.0` | Вклад `aggressiveness` в потребность в пище |
+| `energy_capacity` | float | `100.0` | Максимальный запас энергии особи |
+| `energy_initial` | float | `70.0` | Запас энергии при рождении или инициализации |
+| `food_energy_conversion` | float | `0.5` | Сколько энергии даёт единица съеденной пищи |
+| `basal_energy_cost` | float | `1.0` | Базовый расход энергии за шаг |
+| `speed_energy_cost` | float | `2.0` | Дополнительный расход энергии от скорости |
+| `aggressiveness_energy_cost` | float | `3.0` | Дополнительный расход энергии от агрессивности |
 
 ### `fitness` (`FitnessConfig`)
 
@@ -224,12 +235,12 @@ python3 main.py environment=famine population.initial_size=200 n_steps=1000
 |---|---|---|
 | `default` | Базовые значения | — |
 | `stable` | Статичная среда, без климатического давления | Контрольный baseline |
-| `warming` | Длительное монотонное потепление с холодного старта | `heat_resistance` |
-| `ice_age` | Похолодание + сжатие пищевой базы | `cold_resistance`, метаболизм |
-| `harsh_seasons` | Быстрые тепловые циклы (~150 шагов на цикл) | Двусторонняя терморегуляция |
-| `famine` | Дефицит еды (≈4× ниже нормы), убывающая пищевая база | Конкуренция, `size`, метаболизм |
-| `hazardous` | Уровень опасности растёт в 5× быстрее, старт выше | `resilience` |
-| `chaos` | Сезонность + растущая опасность + дефицит еды одновременно | Стресс-тест |
+| `warming` | Потепление с холодного старта и слегка замедленным восстановлением пищи | `heat_resistance` |
+| `ice_age` | Похолодание, меньшая ёмкость и медленное восстановление пищи | `cold_resistance`, метаболизм |
+| `harsh_seasons` | Быстрые тепловые циклы и неполное восстановление ресурса | Двусторонняя терморегуляция |
+| `famine` | Ёмкость пищи ≈4× ниже нормы и регенерация 15% дефицита за шаг | Конкуренция, `size`, метаболизм |
+| `hazardous` | Уровень опасности растёт в 5× быстрее, восстановление пищи замедлено | `resilience` |
+| `chaos` | Сезонность, растущая опасность, малая ёмкость и регенерация 30% | Стресс-тест |
 
 ---
 

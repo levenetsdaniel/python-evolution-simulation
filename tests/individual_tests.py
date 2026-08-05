@@ -124,13 +124,14 @@ def test_getitem_matches_genes_map():
         assert ind[label] == ind.genes_map[label]
 
 
-def test_satiation_is_limited_to_fullness():
+def test_energy_satiation_and_food_satiation_are_separate():
     ind = make_ind()
-    assert ind.satiation == 0.0
+    assert ind.satiation == pytest.approx(ICFG.energy_initial / ICFG.energy_capacity)
+    assert ind.food_satiation == 0.0
     ind.food_eaten = ind.food_need
-    assert ind.satiation == pytest.approx(1.0)
+    assert ind.food_satiation == pytest.approx(1.0)
     ind.food_eaten = ind.food_need * 2
-    assert ind.satiation == pytest.approx(1.0)
+    assert ind.food_satiation == pytest.approx(1.0)
 
 
 def test_compute_fitness_matches_pure_function_and_does_not_mutate():
@@ -139,9 +140,46 @@ def test_compute_fitness_matches_pure_function_and_does_not_mutate():
     ind.food_eaten = ind.food_need
     snapshot = dict(ind.genes_map)
 
-    expected = fitness_fn({**ind.genes_map, "satiation": 1.0}, m.environment.current_params)
+    expected = fitness_fn({**ind.genes_map, "satiation": ind.satiation}, m.environment.current_params)
     assert ind.compute_fitness() == pytest.approx(expected)
     assert ind.genes_map == snapshot
+
+
+def test_step_converts_food_to_energy_then_pays_metabolic_cost():
+    config = IndividualConfig(
+        energy_capacity=100.0,
+        energy_initial=40.0,
+        food_energy_conversion=0.5,
+        basal_energy_cost=1.0,
+        speed_energy_cost=0.0,
+        aggressiveness_energy_cost=0.0,
+    )
+    m = ConfiguredStubModel(individual=config)
+    ind = make_ind(model=m)
+    ind.food_eaten = 20
+    m.rng = NEVER_DIES
+
+    ind.step()
+
+    assert ind.energy == pytest.approx(49.0)
+
+
+def test_step_can_survive_a_hungry_step_using_energy_reserve():
+    config = IndividualConfig(
+        energy_capacity=100.0,
+        energy_initial=80.0,
+        basal_energy_cost=1.0,
+        speed_energy_cost=0.0,
+        aggressiveness_energy_cost=0.0,
+    )
+    m = ConfiguredStubModel(individual=config)
+    ind = make_ind(model=m)
+    m.rng = NEVER_DIES
+
+    ind.step()
+
+    assert ind.is_alive
+    assert ind.energy == pytest.approx(79.0)
 
 
 def test_compute_fitness_uses_model_fitness_and_environment_config():
@@ -156,14 +194,14 @@ def test_compute_fitness_uses_model_fitness_and_environment_config():
         environment=EnvironmentConfig(min_temperature=-30.0, max_temperature=50.0),
     )
     ind = make_ind(model=configured_model)
-    ind.food_eaten = ind.food_need
+    ind.energy = ind.config.energy_capacity
 
     assert ind.compute_fitness() > default_score
 
 def test_step_records_fitness_and_increments_age_when_alive():
     m = StubModel()
     ind = make_ind(model=m, age=4)
-    ind.food_eaten = ind.food_need
+    ind.energy = ind.config.energy_capacity
     m.rng = NEVER_DIES
 
     ind.step()
@@ -190,7 +228,7 @@ def test_step_does_not_change_an_agent_already_marked_dead():
 def test_step_age_cause_when_old_and_healthy():
     m = StubModel()
     ind = make_ind(model=m, age=300)
-    ind.food_eaten = ind.food_need
+    ind.energy = ind.config.energy_capacity
     m.rng = ALWAYS_DIES
 
     ind.step()

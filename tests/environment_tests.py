@@ -171,15 +171,43 @@ def test_food_distribution_feeds_agent_when_food_exactly_matches_need():
     assert m.population.compete_calls == []
 
 
-def test_step_clamps_declining_food_at_zero():
+def test_step_keeps_food_capacity_constant():
     m = StubModel()
     make_ind(m)
-    env = Environment(m, config=EnvironmentConfig(food_availability=1.0, food_step=-2.0))
+    env = Environment(m, config=EnvironmentConfig(food_availability=1000.0, food_regeneration_rate=0.25))
+
+    env.step()
+    env.step()
+
+    assert env.food_capacity == 1000.0
+    assert env.current_params["food_availability"] == 1000.0
+
+
+@pytest.mark.parametrize(
+    ("regeneration_rate", "expected_food"),
+    [
+        (0.0, 310.0),
+        (0.25, 460.0),
+        (1.0, 910.0),
+    ],
+)
+def test_step_regenerates_a_share_of_missing_food_before_distribution(regeneration_rate, expected_food):
+    m = StubModel()
+    agent = make_ind(m)
+    env = Environment(
+        m,
+        config=EnvironmentConfig(
+            food_availability=1000.0,
+            food_regeneration_rate=regeneration_rate,
+        ),
+    )
+    env.current_food = 400.0
 
     env.step()
 
-    assert env.current_params["food_availability"] == 0.0
-    assert env.current_food == 0.0
+    assert agent.food_eaten == agent.food_need
+    assert env.food_capacity == 1000.0
+    assert env.current_food == pytest.approx(expected_food)
 
 
 def test_food_distribution_resets_current_food_each_round():

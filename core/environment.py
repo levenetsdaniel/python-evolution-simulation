@@ -40,7 +40,8 @@ class Environment:
             "food_availability": self.config.food_availability,
             "hazard_level": self.config.hazard_level_start,
         }
-        self.current_food = self.current_params["food_availability"]
+        self.food_capacity = self.config.food_availability
+        self.current_food = self.food_capacity
         self.prev_params = self.current_params.copy()
         self._temperature_step = self.config.temp_step
         self._hazard_step = self.config.hazard_step
@@ -95,16 +96,18 @@ class Environment:
         self.prev_params = self.current_params.copy()
         self.time += 1
 
-        self.current_params["food_availability"] = max(
-            0.0,
-            self.current_params["food_availability"] + self.config.food_step,
-        )
-        self.current_food = self.current_params["food_availability"]
+        self._regenerate_food()
 
         self.current_params["temperature"] = self._next_temperature()
 
         self.current_params["hazard_level"] = self._next_hazard_level()
         self.food_distribution()
+
+    def _regenerate_food(self) -> None:
+        """Restore a configured share of the missing food up to the capacity."""
+        missing_food = max(0.0, self.food_capacity - self.current_food)
+        regenerated = self.config.food_regeneration_rate * missing_food
+        self.current_food = min(self.food_capacity, self.current_food + regenerated)
 
     def _next_temperature(self) -> float:
         """Advance temperature and reflect it at configured physical bounds."""

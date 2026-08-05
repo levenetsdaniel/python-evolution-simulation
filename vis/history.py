@@ -1,5 +1,6 @@
 import pandas as pd
 
+from core.enums import DeathCause
 from core.model import Model
 
 
@@ -21,9 +22,12 @@ def collect_history_row(model: Model, env_before: dict) -> dict:
     return {
         "Generation": pop.generation,
         "PopulationSize": float(pop.actual_pop_size),
+        "FemaleCount": float(pop.count_females),
+        "MaleCount": float(pop.count_males),
         "AvgFitness": float(pop.avg_fitness),
         "AvgAge": float(pop.avg_age),
         "AvgSatiation": float(pop.avg_satiation),
+        "AvgEnergy": float(pop.avg_energy),
         "AvgHeatResistance": float(pop.avg_heat_resistance),
         "AvgColdResistance": float(pop.avg_cold_resistance),
         "AvgMetabolicRate": float(pop.avg_metabolic_rate),
@@ -33,7 +37,22 @@ def collect_history_row(model: Model, env_before: dict) -> dict:
         "AvgAggressiveness": float(pop.avg_aggressiveness),
         "TemperatureStart": float(env_before["temperature"]),
         "FoodStart": float(env_before["food_availability"]),
+        "FoodRemaining": float(model.environment.current_food),
         "HazardStart": float(env_before["hazard_level"]),
+        "BirthCount": float(model.births_this_step),
+        "Deaths_age": float(model.deaths_this_step[DeathCause.AGE]),
+        "Deaths_fitness": float(model.deaths_this_step[DeathCause.FITNESS]),
+        "Deaths_threshold": float(model.deaths_this_step[DeathCause.THRESHOLD]),
+        "Deaths_competition": float(model.deaths_this_step[DeathCause.COMPETITION]),
+        "Deaths_total": float(sum(model.deaths_this_step.values())),
+        "PopulationDelta": float(model.births_this_step - sum(model.deaths_this_step.values())),
+        "AttacksConsidered": float(model.attacks_this_step["considered"]),
+        "AttacksDeclined": float(model.attacks_this_step["declined"]),
+        "AttacksStarted": float(model.attacks_this_step["started"]),
+        "AttacksLost": float(model.attacks_this_step["lost"]),
+        "AttacksWon": float(model.attacks_this_step["won"]),
+        "FoodStolen": float(model.attacks_this_step["food_stolen"]),
+        "AttackEnergySpent": float(model.attacks_this_step["energy_spent"]),
     }
 
 

@@ -70,6 +70,53 @@ def _build_group_figure(
     return fig
 
 
+def _build_stacked_bar(
+    history_df: pd.DataFrame,
+    title: str,
+    columns: list[str],
+    y_axis_title: str,
+) -> go.Figure:
+    """Build a stacked event-count bar chart."""
+    required = {"Generation", *columns}
+    missing = required - set(history_df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns: {sorted(missing)}")
+
+    fig = go.Figure()
+    for column in columns:
+        fig.add_trace(
+            go.Bar(
+                x=history_df["Generation"],
+                y=history_df[column],
+                name=column,
+            )
+        )
+
+    fig.update_layout(
+        title=title,
+        template="plotly_white",
+        barmode="stack",
+        hovermode="x unified",
+        height=550,
+        xaxis_title="Generation",
+        yaxis_title=y_axis_title,
+    )
+
+    if history_df[columns].to_numpy().sum() == 0:
+        fig.add_annotation(
+            text="No deaths recorded for this run",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font={"size": 16},
+        )
+        fig.update_yaxes(range=[0, 1])
+
+    return fig
+
+
 def build_all_figures(history_df: pd.DataFrame) -> dict[str, go.Figure]:
     """
     Build all basic visualization figures required for the first iteration.
@@ -88,8 +135,16 @@ def build_all_figures(history_df: pd.DataFrame) -> dict[str, go.Figure]:
             history_df=history_df,
             title="Body Traits vs Food",
             left_cols=["AvgSize", "AvgSpeed", "AvgAggressiveness", "AvgResilience", "AvgMetabolicRate"],
-            right_cols=["FoodStart"],
+            right_cols=["FoodStart", "FoodRemaining"],
             left_axis_title="Trait value",
+            right_axis_title="Food",
+        ),
+        "energy_food": _build_group_figure(
+            history_df=history_df,
+            title="Energy Reserve vs Food",
+            left_cols=["AvgEnergy"],
+            right_cols=["FoodStart", "FoodRemaining"],
+            left_axis_title="Average energy",
             right_axis_title="Food",
         ),
         "resilience_hazard": _build_group_figure(
@@ -107,6 +162,32 @@ def build_all_figures(history_df: pd.DataFrame) -> dict[str, go.Figure]:
             right_cols=["PopulationSize"],
             left_axis_title="Fitness",
             right_axis_title="Population size",
+        ),
+        "demography": _build_group_figure(
+            history_df=history_df,
+            title="Population by Sex",
+            left_cols=["PopulationSize", "FemaleCount", "MaleCount"],
+            left_axis_title="Individuals",
+        ),
+        "death_causes": _build_stacked_bar(
+            history_df=history_df,
+            title="Deaths by Cause",
+            columns=["Deaths_age", "Deaths_fitness", "Deaths_threshold", "Deaths_competition"],
+            y_axis_title="Deaths",
+        ),
+        "population_flow": _build_group_figure(
+            history_df=history_df,
+            title="Births, Deaths, and Population Change",
+            left_cols=["BirthCount", "Deaths_total", "PopulationDelta"],
+            left_axis_title="Individuals per generation",
+        ),
+        "attack_decisions": _build_group_figure(
+            history_df=history_df,
+            title="Attack Decisions and Outcomes",
+            left_cols=["AttacksConsidered", "AttacksDeclined", "AttacksStarted", "AttacksLost", "AttacksWon"],
+            right_cols=["FoodStolen", "AttackEnergySpent"],
+            left_axis_title="Attack events",
+            right_axis_title="Food and energy",
         ),
     }
     return figures

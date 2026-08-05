@@ -10,9 +10,11 @@ import comparison_run
 import main as main_entry
 from config.output_paths import SIMULATION_PLOTS_DIR
 from config.scenarios import SCENARIOS
-from config.sim_config import ComparisonConfig, EnvironmentConfig, SimConfig
+from config.sim_config import ComparisonConfig, EnvironmentConfig, IndividualConfig, SimConfig
 from core.enums import RunStatus
 from core.model import Model, SimulationResult
+from vis.history import collect_history
+from vis.plots import build_all_figures
 
 
 def test_core_model_runs_without_recorder():
@@ -24,11 +26,62 @@ def test_core_model_runs_without_recorder():
     assert len(model_df) > 0
 
 
+def test_simulation_history_contains_demography_death_and_attack_metrics():
+    history = collect_history(Model(SimConfig(n_steps=2, seed=0)), n_steps=2)
+
+    expected_columns = {
+        "FemaleCount",
+        "MaleCount",
+        "BirthCount",
+        "Deaths_age",
+        "Deaths_fitness",
+        "Deaths_threshold",
+        "Deaths_competition",
+        "Deaths_total",
+        "PopulationDelta",
+        "AttacksConsidered",
+        "AttacksDeclined",
+        "AttacksStarted",
+        "AttacksLost",
+        "AttacksWon",
+        "FoodStolen",
+        "AttackEnergySpent",
+    }
+
+    assert expected_columns <= set(history.columns)
+    assert (history["FemaleCount"] + history["MaleCount"] == history["PopulationSize"]).all()
+    assert (history["PopulationDelta"] == history["BirthCount"] - history["Deaths_total"]).all()
+
+
+def test_visualization_builds_demography_death_flow_and_attack_figures():
+    history = collect_history(Model(SimConfig(n_steps=2, seed=0)), n_steps=2)
+
+    figures = build_all_figures(history)
+
+    assert {"demography", "death_causes", "population_flow", "attack_decisions"} <= set(figures)
+    assert len(figures["demography"].data) == 3
+    assert len(figures["death_causes"].data) == 4
+    assert len(figures["population_flow"].data) == 3
+    assert len(figures["attack_decisions"].data) == 7
+
+
+def test_death_causes_figure_marks_runs_without_deaths():
+    history = collect_history(Model(SimConfig(n_steps=1, seed=0)), n_steps=1)
+    death_columns = ["Deaths_age", "Deaths_fitness", "Deaths_threshold", "Deaths_competition"]
+    history.loc[:, death_columns] = 0
+
+    figure = build_all_figures(history)["death_causes"]
+
+    assert len(figure.layout.annotations) == 1
+    assert figure.layout.annotations[0].text == "No deaths recorded for this run"
+
+
 def test_model_handles_extinction_from_food_shortage_without_nan_metrics():
     config = SimConfig(
         n_steps=3,
         seed=0,
         environment=EnvironmentConfig(food_availability=0.0),
+        individual=IndividualConfig(energy_initial=1.0),
     )
     model = Model(config)
 
