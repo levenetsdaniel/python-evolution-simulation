@@ -26,6 +26,26 @@ def test_core_model_runs_without_recorder():
     assert len(model_df) > 0
 
 
+def test_agent_history_is_disabled_unless_explicitly_requested():
+    model = Model(SimConfig(n_steps=2, seed=0))
+
+    model.run(2)
+
+    assert model.datacollector.agent_reporters == {}
+
+
+@pytest.mark.parametrize("config", [
+    SimConfig(n_steps=2, seed=0, collect_agent_data=True),
+    SimConfig(n_steps=2, seed=0, individual_info=True),
+])
+def test_agent_history_can_be_enabled_explicitly(config):
+    model = Model(config)
+
+    model.run(2)
+
+    assert set(model.datacollector.agent_reporters) == {"Fitness", "Age", "Energy"}
+
+
 def test_simulation_history_contains_demography_death_and_attack_metrics():
     history = collect_history(Model(SimConfig(n_steps=2, seed=0)), n_steps=2)
 
@@ -51,6 +71,16 @@ def test_simulation_history_contains_demography_death_and_attack_metrics():
     assert expected_columns <= set(history.columns)
     assert (history["FemaleCount"] + history["MaleCount"] == history["PopulationSize"]).all()
     assert (history["PopulationDelta"] == history["BirthCount"] - history["Deaths_total"]).all()
+
+
+def test_history_uses_post_step_environment_with_matching_time_step():
+    config = SimConfig(n_steps=1, seed=0)
+    history = collect_history(Model(config), n_steps=1)
+
+    assert history["TimeStep"].tolist() == [0, 1]
+    assert history.loc[1, "Temperature"] == pytest.approx(
+        config.environment.temp_start + config.environment.temp_step
+    )
 
 
 def test_visualization_builds_demography_death_flow_and_attack_figures():
@@ -181,7 +211,7 @@ def test_main_view_mode_builds_and_saves_figures(monkeypatch):
 
     def fake_collect_history(model, n_steps):
         calls["collect_history"] = (model, n_steps)
-        return pd.DataFrame([{"Generation": 1}])
+        return pd.DataFrame([{"TimeStep": 1}])
 
     def fake_build_all_figures(history):
         calls["build_figures"] = history

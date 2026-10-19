@@ -8,6 +8,7 @@ class DeathCause(Enum):
     FITNESS = "fitness"
     AGE = "age"
     COMPETITION = "competition"
+    ENERGY = "energy"
 
 
 class Gender(Enum):

@@ -72,12 +72,12 @@ def make_ind(model=None, genome=None, **kwargs):
 def test_init_sets_all_fields():
     genome = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7])
     m = StubModel()
-    ind = make_ind(model=m, genome=genome, age=3, generation=5, parent_ids=(42, 99))
+    ind = make_ind(model=m, genome=genome, age=3, birth_step=5, parent_ids=(42, 99))
 
     assert ind.is_alive and ind.death_cause is None
     assert ind.fitness is None
     assert ind.food_eaten == 0
-    assert ind.age == 3 and ind.generation == 5
+    assert ind.age == 3 and ind.birth_step == 5
     assert ind.parent_ids == (42, 99)
     assert ind.gender in list(Gender)
     assert ind in m.agents
@@ -260,12 +260,12 @@ def test_from_parents_inherits_labels_ids_and_genome():
     p1, p2 = make_ind(model=m), make_ind(model=m)
     genome = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7])
 
-    child = Individual.from_parents(m, p1, p2, genome, generation=10)
+    child = Individual.from_parents(m, p1, p2, genome, birth_step=10)
 
     assert child.parent_ids == (p1.unique_id, p2.unique_id)
     assert child.genome_labels == p1.genome_labels
     np.testing.assert_array_equal(child.genome, genome)
-    assert child.generation == 10
+    assert child.birth_step == 10
 
 
 @pytest.mark.parametrize(

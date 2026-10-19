@@ -4,11 +4,26 @@ import numpy as np
 import pytest
 
 from config.sim_config import EnvironmentConfig, FitnessConfig
-from core.fitness import _energy_score, _hazard_score, _temp_score, _proportion_score, fitness
+from core.fitness import _energy_score, _hazard_score, _temp_score, _proportion_score, batch_fitness, fitness
 
 FCFG = FitnessConfig()
 ECFG = EnvironmentConfig()
 FLOOR = FCFG.score_floor
+
+
+def test_batch_fitness_matches_scalar_fitness_for_every_genome():
+    rng = np.random.default_rng(7)
+    genomes = rng.random((20, 7))
+    satiation = rng.random(20)
+    env = {"temperature": 37.0, "hazard_level": 0.4}
+
+    actual = batch_fitness(genomes, satiation, env)
+    expected = np.array([
+        fitness({**dict(zip(["heat_resistance", "cold_resistance", "metabolic_rate", "resilience", "size", "speed", "aggressiveness"], genome)), "satiation": sat}, env)
+        for genome, sat in zip(genomes, satiation)
+    ])
+
+    np.testing.assert_allclose(actual, expected)
 
 
 def _comfort_temp() -> float:

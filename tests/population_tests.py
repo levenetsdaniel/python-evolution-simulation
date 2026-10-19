@@ -105,7 +105,7 @@ def test_init_and_initialize_creates_initial_size_agents():
     m = StubModel()
     pop = Population(m, config=PopulationConfig(initial_size=5))
 
-    assert pop.generation == 0
+    assert pop.time_step == 0
     assert pop.initial_size == 5
     assert len(m.agents) == 0
 
@@ -454,9 +454,9 @@ def test_reproduce_creates_clipped_children_and_records_births():
         assert p1_id in (f1.unique_id, f2.unique_id)
         assert p2_id == male.unique_id
         assert (child.genome >= 0.0).all() and (child.genome <= 1.0).all()
-        assert child.generation == pop.generation
+        assert child.birth_step == pop.time_step
 
-def test_step_orchestrates_lifecycle_and_increments_generation():
+def test_step_orchestrates_lifecycle_and_increments_time_step():
     m = StubModel(seed=42)
     pop = Population(m, config=PopulationConfig(initial_size=20))
     pop.initialize()
@@ -464,9 +464,9 @@ def test_step_orchestrates_lifecycle_and_increments_generation():
     for a in m.agents:
         a.food_eaten = a.food_need
 
-    initial_gen = pop.generation
+    initial_time_step = pop.time_step
     pop.step()
 
-    assert pop.generation == initial_gen + 1
+    assert pop.time_step == initial_time_step + 1
     assert all(a.is_alive for a in m.agents)
     assert len(m.agents) > 0

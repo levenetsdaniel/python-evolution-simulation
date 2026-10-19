@@ -7,11 +7,16 @@ defaults:
   - _self_
 
 n_steps: 600
+mode: classic
+spatial_csv: ''
+spatial_html: artifacts/plots/spatial/world.html
+spatial_view_interval: 5
 seed: 42
 steps_info: 5
 model_info: false
 population_info: false
 individual_info: false
+collect_agent_data: false
 view: false
 debug: false
 

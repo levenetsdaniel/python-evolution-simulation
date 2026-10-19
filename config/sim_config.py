@@ -72,6 +72,40 @@ class FitnessConfig:
 
 
 @dataclass
+class SpatialConfig:
+    """Parameters for the independent spatial life cycle (one step is one time unit)."""
+
+    width: float = 100.0
+    height: float = 100.0
+    initial_population: int = 100
+    max_population: int = 500
+    initial_energy: float = 100.0
+    max_energy: float = 150.0
+    cluster_count: int = 5
+    sources_per_cluster: int = 8
+    cluster_spread: float = 8.0
+    food_capacity: float = 100.0
+    food_initial: float = 100.0
+    food_regeneration: float = 1.0
+    food_radius: float = 2.0
+    food_bite: float = 5.0
+    food_energy: float = 3.0
+    movement_energy_cost: float = 0.5
+    base_speed: float = 0.5
+    speed_trait_scale: float = 1.5
+    base_perception: float = 8.0
+    perception_trait_scale: float = 12.0
+    exploration_turn: float = 0.5
+    reproduction_energy: float = 90.0
+    offspring_energy: float = 30.0
+    reproduction_rate: float = 0.4
+    min_reproduction_age: int = 2
+    mating_radius: float = 10.0
+    offspring_offset: float = 2.0
+    mutation_std: float = 0.12
+
+
+@dataclass
 class SimConfig:
     """Simulation configuration. Aggregates all sub-configs."""
 
@@ -79,12 +113,18 @@ class SimConfig:
     population: PopulationConfig = field(default_factory=PopulationConfig)
     individual: IndividualConfig = field(default_factory=IndividualConfig)
     fitness: FitnessConfig = field(default_factory=FitnessConfig)
+    spatial: SpatialConfig = field(default_factory=SpatialConfig)
+    mode: str = "classic"
+    spatial_csv: str = ""
+    spatial_html: str = "artifacts/plots/spatial/world.html"
+    spatial_view_interval: int = 5
     n_steps: int = 600
     seed: int = 42
     steps_info: int = 5
     model_info: bool = False
     population_info: bool = False
     individual_info: bool = False
+    collect_agent_data: bool = False
     view: bool = False
     debug: bool = False
 
@@ -210,13 +250,16 @@ def validate_sim_config(config: SimConfig) -> None:
 
     _require(config.n_steps >= 0, "n_steps must be non-negative")
     _require(config.steps_info >= 0, "steps_info must be non-negative")
+    _require(config.mode in ("classic", "spatial"), "mode must be classic or spatial")
+    _require(config.spatial_view_interval >= 1, "spatial_view_interval must be positive")
+    validate_spatial_config(config.spatial)
 
     for name, value in _numeric_fields(config):
         _require(isfinite(value), f"{name} must be finite")
 
 
 def _numeric_fields(config: SimConfig):
-    for group_name in ("environment", "population", "individual", "fitness"):
+    for group_name in ("environment", "population", "individual", "fitness", "spatial"):
         group = getattr(config, group_name)
         for name, value in vars(group).items():
             if isinstance(value, (int, float)):
@@ -226,3 +269,23 @@ def _numeric_fields(config: SimConfig):
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(f"Invalid simulation config: {message}")
+
+
+def validate_spatial_config(config: SpatialConfig) -> None:
+    """Validate independently, so SpatialWorld can be used without SimConfig."""
+    from dataclasses import fields
+
+    for item in fields(config):
+        value = getattr(config, item.name)
+        if isinstance(value, (int, float)):
+            _require(isfinite(value), f"spatial.{item.name} must be finite")
+            _require(value >= 0, f"spatial.{item.name} must be non-negative")
+    for name in ("width", "height", "max_population", "max_energy", "food_capacity"):
+        _require(getattr(config, name) > 0, f"spatial.{name} must be positive")
+    _require(config.initial_population <= config.max_population, "spatial.initial_population exceeds max_population")
+    _require(config.initial_energy <= config.max_energy, "spatial.initial_energy exceeds max_energy")
+    _require(config.food_initial <= config.food_capacity, "spatial.food_initial exceeds food_capacity")
+    _require(config.offspring_energy <= config.max_energy, "spatial.offspring_energy exceeds max_energy")
+    _require(config.reproduction_energy >= config.offspring_energy,
+             "spatial.reproduction_energy must cover offspring_energy")
+    _require(config.reproduction_rate <= 1, "spatial.reproduction_rate must be in [0, 1]")

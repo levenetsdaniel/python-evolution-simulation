@@ -71,10 +71,19 @@ class Model(mesa.Model):
             "food_stolen": 0,
             "energy_spent": 0.0,
         }
+        agent_reporters = (
+            {
+                "Fitness": "fitness",
+                "Age": "age",
+                "Energy": "energy",
+            }
+            if self.config.collect_agent_data or self.config.individual_info
+            else {}
+        )
         self.datacollector = mesa.DataCollector(
             model_reporters={
                 "Step": lambda m: m.step_count,
-                "Generation": lambda m: m.population.generation,
+                "TimeStep": lambda m: m.population.time_step,
                 "PopulationSize": lambda m: m.population.actual_pop_size,
                 "FemaleCount": lambda m: m.population.count_females,
                 "MaleCount": lambda m: m.population.count_males,
@@ -111,15 +120,19 @@ class Model(mesa.Model):
                 "AttackEnergySpent": lambda m: m.attacks_this_step["energy_spent"],
             },
 
-            agent_reporters={
-                "Fitness": "fitness",
-                "Age": "age",
-                "Energy": "energy",
-            }
+            agent_reporters=agent_reporters,
         )
 
         self.population.initialize()
-        self.datacollector.collect(self)
+        self._collect_data()
+
+    def _collect_data(self) -> None:
+        """Collect all reporters from one consistent population snapshot."""
+        self.population.cache_metrics()
+        try:
+            self.datacollector.collect(self)
+        finally:
+            self.population.invalidate_metrics()
 
     def _display_info(self):
         print("step", self.step_count)
@@ -164,7 +177,7 @@ class Model(mesa.Model):
         self.environment.step()
         self.population.step()
         self.step_count += 1
-        self.datacollector.collect(self)
+        self._collect_data()
 
         if self.config.debug:
             self._display_info()
@@ -195,10 +208,11 @@ class Model(mesa.Model):
         return SimulationResult(status=RunStatus.COMPLETED, completed_steps=self.step_count)
 
     def _terminal_status(self) -> RunStatus | None:
-        if len(self.agents) == 0:
+        metrics = self.population.metrics()
+        if metrics.population_size == 0:
             return RunStatus.EXTINCT
-        if self.population.count_females == 0:
+        if metrics.female_count == 0:
             return RunStatus.NO_FEMALES
-        if self.population.count_males == 0:
+        if metrics.male_count == 0:
             return RunStatus.NO_MALES
         return None

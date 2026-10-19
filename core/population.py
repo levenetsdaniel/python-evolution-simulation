@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -7,7 +8,29 @@ if TYPE_CHECKING:
 import numpy as np
 from config.sim_config import PopulationConfig
 from .enums import DeathCause, Gender
+from .fitness import batch_fitness
+from .genetics import crossover_and_mutate
 from .individual import Individual
+
+
+@dataclass(frozen=True)
+class PopulationMetrics:
+    """Aggregate values calculated from one consistent population snapshot."""
+
+    population_size: int
+    female_count: int
+    male_count: int
+    avg_fitness: float
+    avg_age: float
+    avg_satiation: float
+    avg_energy: float
+    avg_heat_resistance: float
+    avg_cold_resistance: float
+    avg_metabolic_rate: float
+    avg_resilience: float
+    avg_size: float
+    avg_speed: float
+    avg_aggressiveness: float
 
 
 class Population:
@@ -23,13 +46,17 @@ class Population:
 
         Initializes:
             - Initial population size
-            - Generation counter
+            - Simulation time-step counter
         """
 
         self.model = model
         self.config = config or PopulationConfig()
         self.initial_size = self.config.initial_size
-        self.generation = 0
+        self.time_step = 0
+        self._metrics: PopulationMetrics | None = None
+        self._batch_agents: list[Individual] | None = None
+        self._batch_genomes: np.ndarray | None = None
+        self._trait_indices = {label: index for index, label in enumerate(self.config.genome_labels)}
 
     def initialize(self):
         """
@@ -41,86 +68,158 @@ class Population:
         for _ in range(self.initial_size):
             ind = Individual.random_init(self.model, self.config.genome_labels)
             self.model.agents.add(ind)
+        self.invalidate_metrics()
+        self.invalidate_batch_cache()
+
+    def invalidate_metrics(self) -> None:
+        """Discard the temporary aggregate snapshot."""
+        self._metrics = None
+
+    def invalidate_batch_cache(self) -> None:
+        """Discard cached agent ordering and genome matrix after births or deaths."""
+        self._batch_agents = None
+        self._batch_genomes = None
+
+    def _fitness_batch(self) -> tuple[list[Individual], np.ndarray]:
+        """Return live agents and their immutable genomes, rebuilding after population changes."""
+        if self._batch_agents is None or self._batch_genomes is None:
+            self._batch_agents = [agent for agent in self.model.agents if agent.is_alive]
+            self._batch_genomes = (
+                np.stack([agent.genome for agent in self._batch_agents])
+                if self._batch_agents
+                else np.empty((0, len(self.config.genome_labels)), dtype=float)
+            )
+        return self._batch_agents, self._batch_genomes
+
+    def metrics(self) -> PopulationMetrics:
+        """Return the active aggregate snapshot, or calculate a fresh one."""
+        return self._metrics or self._calculate_metrics()
+
+    def cache_metrics(self) -> PopulationMetrics:
+        """Calculate metrics once for a coordinated reporting operation."""
+        self._metrics = self._calculate_metrics()
+        return self._metrics
+
+    def _calculate_metrics(self) -> PopulationMetrics:
+        """Calculate aggregate values from the currently live agents."""
+        alive_count = female_count = male_count = fitness_count = 0
+        totals = {
+            "fitness": 0.0,
+            "age": 0.0,
+            "satiation": 0.0,
+            "energy": 0.0,
+            "heat_resistance": 0.0,
+            "cold_resistance": 0.0,
+            "metabolic_rate": 0.0,
+            "resilience": 0.0,
+            "size": 0.0,
+            "speed": 0.0,
+            "aggressiveness": 0.0,
+        }
+        for agent in self.model.agents:
+            if not agent.is_alive:
+                continue
+            alive_count += 1
+            if agent.gender == Gender.FEMALE:
+                female_count += 1
+            else:
+                male_count += 1
+            totals["age"] += agent.age
+            totals["satiation"] += agent.satiation
+            totals["energy"] += agent.energy
+            for trait in self.config.genome_labels:
+                totals[trait] += agent[trait]
+            if agent.fitness is not None:
+                totals["fitness"] += agent.fitness
+                fitness_count += 1
+
+        mean = lambda name: totals[name] / alive_count if alive_count else 0.0
+        return PopulationMetrics(
+            population_size=alive_count,
+            female_count=female_count,
+            male_count=male_count,
+            avg_fitness=totals["fitness"] / fitness_count if fitness_count else 0.0,
+            avg_age=mean("age"),
+            avg_satiation=mean("satiation"),
+            avg_energy=mean("energy"),
+            avg_heat_resistance=mean("heat_resistance"),
+            avg_cold_resistance=mean("cold_resistance"),
+            avg_metabolic_rate=mean("metabolic_rate"),
+            avg_resilience=mean("resilience"),
+            avg_size=mean("size"),
+            avg_speed=mean("speed"),
+            avg_aggressiveness=mean("aggressiveness"),
+        )
 
     @property
     def count_females(self) -> int:
         """Return number of female individuals in the population."""
-        return len([a for a in self.model.agents if a.is_alive and a.gender == Gender.FEMALE])
+        return self.metrics().female_count
 
     @property
     def count_males(self) -> int:
         """Return number of male individuals in the population."""
-        return len([a for a in self.model.agents if a.is_alive and a.gender == Gender.MALE])
+        return self.metrics().male_count
 
     @property
     def actual_pop_size(self) -> int:
         """Return number of alive individuals."""
-        return len([a for a in self.model.agents if a.is_alive])
+        return self.metrics().population_size
 
     @property
     def avg_fitness(self) -> np.floating:
         """Compute average fitness of alive individuals."""
-        return self._mean_alive(lambda agent: agent.fitness, require_fitness=True)
+        return self.metrics().avg_fitness
 
     @property
     def avg_age(self) -> np.floating:
         """Compute average age of alive individuals."""
-        return self._mean_alive(lambda agent: agent.age)
+        return self.metrics().avg_age
 
     @property
     def avg_satiation(self) -> np.floating:
         """Compute average normalized energy reserve of alive individuals."""
-        return self._mean_alive(lambda agent: agent.satiation)
+        return self.metrics().avg_satiation
 
     @property
     def avg_energy(self) -> np.floating:
         """Compute average absolute energy reserve of alive individuals."""
-        return self._mean_alive(lambda agent: agent.energy)
+        return self.metrics().avg_energy
 
     @property
     def avg_heat_resistance(self) -> np.floating:
         """Compute average heat resistance trait."""
-        return self._mean_alive(lambda agent: agent["heat_resistance"])
+        return self.metrics().avg_heat_resistance
 
     @property
     def avg_cold_resistance(self) -> np.floating:
         """Compute average cold resistance trait."""
-        return self._mean_alive(lambda agent: agent["cold_resistance"])
+        return self.metrics().avg_cold_resistance
 
     @property
     def avg_metabolic_rate(self) -> np.floating:
         """Compute average metabolic rate trait."""
-        return self._mean_alive(lambda agent: agent["metabolic_rate"])
+        return self.metrics().avg_metabolic_rate
 
     @property
     def avg_resilience(self) -> np.floating:
         """Compute average resilience trait."""
-        return self._mean_alive(lambda agent: agent["resilience"])
+        return self.metrics().avg_resilience
 
     @property
     def avg_size(self) -> np.floating:
         """Compute average size trait."""
-        return self._mean_alive(lambda agent: agent["size"])
+        return self.metrics().avg_size
 
     @property
     def avg_speed(self) -> np.floating:
         """Compute average speed trait."""
-        return self._mean_alive(lambda agent: agent["speed"])
+        return self.metrics().avg_speed
 
     @property
     def avg_aggressiveness(self) -> np.floating:
         """Compute average aggressiveness trait."""
-        return self._mean_alive(lambda agent: agent["aggressiveness"])
-
-    def _mean_alive(self, value, *, require_fitness: bool = False) -> np.floating:
-        """Return a stable mean over alive agents, using zero after extinction."""
-        agents = (
-            agent
-            for agent in self.model.agents
-            if agent.is_alive and (not require_fitness or agent.fitness is not None)
-        )
-        values = [value(agent) for agent in agents]
-        return np.mean(values) if values else np.float64(0.0)
+        return self.metrics().avg_aggressiveness
 
     def remove_dead(self):
         """
@@ -138,6 +237,9 @@ class Population:
         }
         for agent in dead:
             agent.remove()
+        self.invalidate_metrics()
+        if dead:
+            self.invalidate_batch_cache()
 
     def remove_food(self):
         for a in self.model.agents:
@@ -156,6 +258,7 @@ class Population:
         if self.model.rng.random() < death_prob:
             loser.is_alive = False
             loser.death_cause = DeathCause.COMPETITION
+            self.invalidate_batch_cache()
 
     def compete(self, hungry: list[Individual], fed: list[Individual]):
         """
@@ -260,6 +363,7 @@ class Population:
             - Create new individuals
         """
 
+        self.invalidate_metrics()
         females = list(a for a in self.model.agents if
                        a.is_alive and a.fitness is not None and a.gender == Gender.FEMALE
                        and a.age >= self.config.min_reproduction_age
@@ -284,19 +388,17 @@ class Population:
 
             p2 = males[self.model.rng.choice(len(males), p=male_weights)]
 
-            mask = self.model.rng.random(len(p1.genome)) > 0.5
-            pre_mutation_genome = np.where(mask, p1.genome, p2.genome)
-
-            genome, mutation_deltas = self.model.mutation_strategy.mutate(pre_mutation_genome, p1, p2, self.model)
+            genome, pre_mutation_genome, mutation_deltas = crossover_and_mutate(p1, p2, self.model)
             child = Individual.from_parents(
                 model=self.model,
                 p1=p1,
                 p2=p2,
                 genome=genome,
-                generation=self.generation,
+                birth_step=self.time_step,
             )
 
             self.model.agents.add(child)
+            self.invalidate_batch_cache()
             self.model.births_this_step += 1
             p1.spend_energy(self.config.reproduction_energy_cost)
 
@@ -328,7 +430,31 @@ class Population:
     def step(self):
         """Advance population state by one step."""
 
-        self.model.agents.shuffle_do("step")
+        self.invalidate_metrics()
+        shuffled_agents = list(self.model.agents.shuffle())
+        for agent in shuffled_agents:
+            if agent.is_alive:
+                agent._update_energy()
+
+        batch_agents, genomes = self._fitness_batch()
+        satiation = np.fromiter(
+            (agent.satiation for agent in batch_agents),
+            dtype=float,
+            count=len(batch_agents),
+        )
+        scores = batch_fitness(
+            genomes,
+            satiation,
+            self.model.environment.current_params,
+            fitness_config=getattr(getattr(self.model, "config", None), "fitness", None),
+            environment_config=getattr(getattr(self.model, "config", None), "environment", None),
+            trait_indices=self._trait_indices,
+        )
+        score_by_agent = dict(zip(batch_agents, scores))
+        for agent in shuffled_agents:
+            if agent.is_alive:
+                agent.fitness = float(score_by_agent[agent])
+                agent.apply_fitness_outcome()
         self.remove_dead()
-        self.generation += 1
+        self.time_step += 1
         self.reproduce()

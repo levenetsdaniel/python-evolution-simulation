@@ -7,8 +7,10 @@ from config.registry import register_configs
 from config.sim_config import SimConfig
 from core.enums import RunStatus
 from core.model import Model
+from core.spatial import SpatialWorld
 from vis.history import collect_history
 from vis.plots import build_all_figures, save_figures
+from vis.spatial import build_spatial_figure, collect_spatial_snapshots, save_spatial_figure
 
 register_configs()
 
@@ -16,6 +18,20 @@ register_configs()
 @hydra.main(version_base=None, config_path="config", config_name="sim_config")
 def main(cfg: SimConfig) -> None:
     cfg = OmegaConf.to_object(cfg)
+
+    if cfg.mode == "spatial":
+        world = SpatialWorld(cfg.spatial, seed=cfg.seed, genome_labels=cfg.population.genome_labels,
+                             individual_config=cfg.individual)
+        if cfg.view:
+            snapshots = collect_spatial_snapshots(world, cfg.n_steps, cfg.spatial_view_interval)
+            path = save_spatial_figure(build_spatial_figure(world, snapshots), cfg.spatial_html)
+            print(f"Spatial visualization: {path}")
+        else:
+            world.run(cfg.n_steps)
+        if cfg.spatial_csv:
+            world.export_csv(cfg.spatial_csv)
+        print(world.history[-1])
+        return
 
     if cfg.view:
         history = collect_history(Model(cfg), cfg.n_steps)
