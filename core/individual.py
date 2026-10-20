@@ -42,8 +42,10 @@ class Individual(mesa.Agent):
         self.config = (getattr(self.model, "individual_config", None)
                        or getattr(model_config, "individual", None)
                        or DEFAULT_INDIVIDUAL_CONFIG)
-        self._fitness_config = getattr(model_config, "fitness", None)
-        self._environment_config = getattr(model_config, "environment", None)
+        self._fitness_config = (getattr(self.model, "fitness_config", None)
+                                or getattr(model_config, "fitness", None))
+        self._environment_config = (getattr(self.model, "environment_config", None)
+                                    or getattr(model_config, "environment", None))
         self.genome = np.array(genome, dtype=float)
         self.genome_labels = genome_labels
         if self.genome.ndim != 1 or len(self.genome) != len(self.genome_labels):
@@ -99,6 +101,21 @@ class Individual(mesa.Agent):
         """Add energy without exceeding the individual's configured capacity."""
         self.energy = min(self.config.energy_capacity, self.energy + amount)
 
+    def eat(self, amount: float, energy_per_unit: float) -> None:
+        """Record food intake and convert it to energy using this mode's units."""
+        self.record_food(amount)
+        self.gain_energy(amount * energy_per_unit)
+
+    def record_food(self, amount: float) -> None:
+        """Record food before energy conversion or competition transfers it."""
+        self.food_eaten += amount
+
+    def can_reproduce(self, min_age: int, min_energy: float) -> bool:
+        return self.is_alive and self.age >= min_age and self.energy >= min_energy
+
+    def reproduction_probability(self, rate: float) -> float:
+        return float(np.clip(rate * self.satiation, 0.0, 1.0))
+
     def metabolic_cost(self) -> float:
         """Return the shared per-step cost of living for this genome."""
         return float(
@@ -124,9 +141,13 @@ class Individual(mesa.Agent):
             Fitness score in range [score_floor, 1.0].
         """
 
+        state = getattr(self, "state", None)
+        environment = self.model.environment
+        conditions = (environment.conditions_at(state.x, state.y) if state is not None
+                      else environment.current_params)
         return fitness(
             self.genes_map,
-            self.model.environment.current_params,
+            conditions,
             fitness_config=self._fitness_config,
             environment_config=self._environment_config,
             satiation=self.satiation,

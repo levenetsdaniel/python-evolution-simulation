@@ -26,6 +26,11 @@ def test_core_model_runs_without_recorder():
     assert len(model_df) > 0
 
 
+def test_spatial_is_default_and_classic_remains_explicit():
+    assert SimConfig().mode == "spatial"
+    assert SimConfig(mode="classic").mode == "classic"
+
+
 def test_agent_history_is_disabled_unless_explicitly_requested():
     model = Model(SimConfig(n_steps=2, seed=0))
 
@@ -183,6 +188,7 @@ def test_main_run_mode_executes_model_and_prints_optional_summaries(monkeypatch,
 
     cfg = OmegaConf.structured(
         SimConfig(
+                mode="classic",
             n_steps=12,
             model_info=True,
             population_info=True,
@@ -225,7 +231,7 @@ def test_main_view_mode_builds_and_saves_figures(monkeypatch):
     monkeypatch.setattr(main_entry, "build_all_figures", fake_build_all_figures)
     monkeypatch.setattr(main_entry, "save_figures", fake_save_figures)
 
-    cfg = OmegaConf.structured(SimConfig(n_steps=8, view=True))
+    cfg = OmegaConf.structured(SimConfig(mode="classic", n_steps=8, view=True))
     main_entry.main.__wrapped__(cfg)
 
     assert calls["collect_history"][1] == 8

@@ -82,25 +82,27 @@ class SpatialConfig:
     initial_energy: float = 100.0
     max_energy: float = 150.0
     cluster_count: int = 5
-    sources_per_cluster: int = 8
+    sources_per_cluster: int = 12
     cluster_spread: float = 8.0
     food_capacity: float = 100.0
     food_initial: float = 100.0
-    food_regeneration: float = 1.0
-    food_radius: float = 2.0
-    food_bite: float = 5.0
-    food_energy: float = 3.0
+    food_regeneration: float = 30.0
+    food_radius: float = 10.0
+    food_bite: float = 10.0
+    food_energy: float = 8.0
+    food_disappearance_probability: float = 0.6
+    food_spawn_probability: float = 0.3
     movement_energy_cost: float = 0.5
     base_speed: float = 0.5
     speed_trait_scale: float = 1.5
-    base_perception: float = 8.0
+    base_perception: float = 25.0
     perception_trait_scale: float = 12.0
     exploration_turn: float = 0.5
     reproduction_energy: float = 90.0
     offspring_energy: float = 30.0
-    reproduction_rate: float = 0.4
+    reproduction_rate: float = 1.0
     min_reproduction_age: int = 2
-    mating_radius: float = 10.0
+    mating_radius: float = 25.0
     offspring_offset: float = 2.0
     mutation_std: float = 0.12
 
@@ -114,7 +116,7 @@ class SimConfig:
     individual: IndividualConfig = field(default_factory=IndividualConfig)
     fitness: FitnessConfig = field(default_factory=FitnessConfig)
     spatial: SpatialConfig = field(default_factory=SpatialConfig)
-    mode: str = "classic"
+    mode: str = "spatial"
     spatial_csv: str = ""
     spatial_html: str = "artifacts/plots/spatial/world.html"
     spatial_view_interval: int = 5
@@ -289,3 +291,7 @@ def validate_spatial_config(config: SpatialConfig) -> None:
     _require(config.reproduction_energy >= config.offspring_energy,
              "spatial.reproduction_energy must cover offspring_energy")
     _require(config.reproduction_rate <= 1, "spatial.reproduction_rate must be in [0, 1]")
+    _require(config.food_disappearance_probability <= 1,
+             "spatial.food_disappearance_probability must be in [0, 1]")
+    _require(config.food_spawn_probability <= 1,
+             "spatial.food_spawn_probability must be in [0, 1]")

@@ -1,11 +1,14 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from math import hypot
 
 if TYPE_CHECKING:
     from .model import Model
+    from .spatial import SpatialWorld
 
 import numpy as np
-from config.sim_config import EnvironmentConfig
+from config.sim_config import EnvironmentConfig, SpatialConfig
 
 
 class Environment:
@@ -75,7 +78,7 @@ class Environment:
 
         for a in ordered:
             if a.food_need <= self.current_food:
-                a.food_eaten = a.food_need
+                a.record_food(a.food_need)
                 self.current_food -= a.food_eaten
                 fed.append(a)
             else:
@@ -93,15 +96,20 @@ class Environment:
         Triggers food distribution among agents.
         """
 
+        self.advance_conditions()
+        self._regenerate_food()
+        self.food_distribution()
+
+    def advance_conditions(self) -> None:
+        """Advance climate and hazard before agents are evaluated this step."""
         self.prev_params = self.current_params.copy()
         self.time += 1
-
-        self._regenerate_food()
-
         self.current_params["temperature"] = self._next_temperature()
-
         self.current_params["hazard_level"] = self._next_hazard_level()
-        self.food_distribution()
+
+    def conditions_at(self, x: float, y: float) -> dict[str, float]:
+        """Return conditions at a point; currently uniform across the world."""
+        return self.current_params
 
     def _regenerate_food(self) -> None:
         """Restore a configured share of the missing food up to the capacity."""
@@ -138,3 +146,121 @@ class Environment:
                 self._hazard_step = abs(self._hazard_step)
 
         return hazard_level
+
+
+@dataclass
+class FoodSource:
+    x: float
+    y: float
+    stock: float
+    capacity: float
+    regeneration: float
+    radius: float
+
+    def restore(self) -> None:
+        self.stock = min(self.capacity, self.stock + self.regeneration)
+
+
+class SpatialEnvironment(Environment):
+    """Spatial food supply, consumption, disappearance and relocation."""
+
+    def __init__(self, model: SpatialWorld, config: SpatialConfig,
+                 environment_config: EnvironmentConfig | None = None):
+        super().__init__(model, environment_config)
+        self.spatial_config = config
+        self.food_sources: list[FoodSource] = []
+        self.disappeared_this_step = 0
+        self.spawned_this_step = 0
+        self._generate_food()
+        self.food_capacity = config.cluster_count * config.sources_per_cluster * config.food_capacity
+        self._sync_food_supply()
+
+    def _sync_food_supply(self) -> None:
+        """Expose spatial food totals through the shared environment interface."""
+        self.current_food = sum(source.stock for source in self.food_sources)
+        self.current_params["food_availability"] = self.current_food
+
+    def _new_source(self, x: float, y: float) -> FoodSource:
+        cfg = self.spatial_config
+        return FoodSource(float(x), float(y), cfg.food_initial, cfg.food_capacity,
+                          cfg.food_regeneration, cfg.food_radius)
+
+    def _generate_food(self) -> None:
+        cfg = self.spatial_config
+        for _ in range(cfg.cluster_count):
+            cx = self.model.rng.uniform(0, cfg.width)
+            cy = self.model.rng.uniform(0, cfg.height)
+            for _ in range(cfg.sources_per_cluster):
+                x = np.clip(self.model.rng.normal(cx, cfg.cluster_spread), 0, cfg.width)
+                y = np.clip(self.model.rng.normal(cy, cfg.cluster_spread), 0, cfg.height)
+                self.food_sources.append(self._new_source(x, y))
+
+    def nearest_food(self, x: float, y: float, radius: float) -> FoodSource | None:
+        candidates = ((hypot(food.x - x, food.y - y), index, food)
+                      for index, food in enumerate(self.food_sources) if food.stock > 0)
+        return next((food for distance, _, food in sorted(candidates) if distance <= radius), None)
+
+    def food_distribution(self) -> None:
+        """Allocate by ID, then apply baseline competition within each source."""
+        self.model.population.remove_food()
+        requests = {}
+        for organism in self.model.organisms.values():
+            x, y = organism.state.x, organism.state.y
+            reachable = [(hypot(food.x - x, food.y - y), index)
+                         for index, food in enumerate(self.food_sources)
+                         if food.stock > 0 and hypot(food.x - x, food.y - y) <= food.radius]
+            if reachable and organism.energy < self.spatial_config.max_energy:
+                _, index = min(reachable)
+                requests.setdefault(index, []).append(organism)
+        for index in sorted(requests):
+            source = self.food_sources[index]
+            organisms = requests[index]
+            offset = (self.model.step_count + index) % len(organisms)
+            organisms = organisms[offset:] + organisms[:offset]
+            remaining = source.stock
+            fed = []
+            hungry = []
+            for organism in organisms:
+                amount = min(remaining, self.spatial_config.food_bite, organism.food_need)
+                if amount > 1e-12:
+                    organism.record_food(amount)
+                    remaining = max(0.0, remaining - amount)
+                    fed.append(organism)
+                else:
+                    hungry.append(organism)
+            source.stock = remaining
+            if hungry and fed:
+                self.model.population.compete(hungry, fed)
+            for organism in organisms:
+                if organism.is_alive:
+                    organism.gain_energy(organism.food_eaten * self.spatial_config.food_energy)
+        self._sync_food_supply()
+
+    def step(self) -> None:
+        """Advance shared climate and hazard; food regrows after reproduction."""
+        self.advance_conditions()
+
+    def update_resources(self) -> None:
+        """Remove exhausted sources by chance, restore survivors, then fill vacancies elsewhere.
+
+        Sources are checked in list order. Each vacant slot has an independent
+        spawn trial; new positions are uniform across the whole world.
+        """
+        self.disappeared_this_step = 0
+        self.spawned_this_step = 0
+        survivors = []
+        for source in self.food_sources:
+            if source.stock <= 1e-12 and self.model.rng.random() < self.spatial_config.food_disappearance_probability:
+                self.disappeared_this_step += 1
+            else:
+                source.restore()
+                survivors.append(source)
+        self.food_sources[:] = survivors
+        vacancies = self.spatial_config.cluster_count * self.spatial_config.sources_per_cluster - len(self.food_sources)
+        for _ in range(max(0, vacancies)):
+            if self.model.rng.random() < self.spatial_config.food_spawn_probability:
+                x = self.model.rng.uniform(0, self.spatial_config.width)
+                y = self.model.rng.uniform(0, self.spatial_config.height)
+                self.food_sources.append(self._new_source(x, y))
+                self.spawned_this_step += 1
+        self._sync_food_supply()

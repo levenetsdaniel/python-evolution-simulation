@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from math import atan2, cos, hypot, pi, sin
 from pathlib import Path
 from typing import Mapping
@@ -12,48 +12,45 @@ import numpy as np
 import mesa
 from mesa.space import ContinuousSpace
 
-from config.sim_config import (IndividualConfig, PopulationConfig, SimConfig,
+from config.sim_config import (EnvironmentConfig, FitnessConfig, IndividualConfig,
+                               PopulationConfig, SimConfig,
                                SpatialConfig, validate_sim_config, validate_spatial_config)
-from .enums import DeathCause, Gender
-from .genetics import crossover_and_mutate
-from .mutation_patterns import BaselineMutation
+from .environment import FoodSource, SpatialEnvironment
+from .mutation_patterns import BaselineMutation, MutationStrategy
+from .population import SpatialPopulation
 from .spatial_individual import SpatialIndividual, SpatialState
 from .spatial_policy import (FoodObservation, HeuristicPolicy, MoveAction,
                              SpatialObservation, SpatialObservationProvider)
 
 
-@dataclass
-class FoodSource:
-    x: float
-    y: float
-    stock: float
-    capacity: float
-    regeneration: float
-    radius: float
-
-    def restore(self) -> None:
-        self.stock = min(self.capacity, self.stock + self.regeneration)
-
-
 class SpatialWorld(mesa.Model):
     """Owns spatial state and executes simultaneous actions in a fixed step order.
 
-    Organisms are processed by ascending ID. Food requests are simultaneous:
-    each source divides insufficient stock in proportion to requested bites.
+    Organisms are processed by ascending ID. Each source rotates this fixed
+    order by step and source index; those without food may compete locally.
     """
 
     def __init__(self, config: SpatialConfig | None = None, seed: int = 42,
                  genome_labels: list[str] | None = None,
-                 individual_config: IndividualConfig | None = None):
+                 individual_config: IndividualConfig | None = None,
+                 environment_config: EnvironmentConfig | None = None,
+                 fitness_config: FitnessConfig | None = None,
+                 mutation_strategy: MutationStrategy | None = None,
+                 population_config: PopulationConfig | None = None):
         self.config = config or SpatialConfig()
         validate_spatial_config(self.config)
         super().__init__(rng=seed)
         self.individual_config = replace(individual_config or IndividualConfig(),
                                          energy_initial=self.config.initial_energy,
                                          energy_capacity=self.config.max_energy)
-        validate_sim_config(SimConfig(individual=self.individual_config, spatial=self.config))
-        self.mutation_strategy = BaselineMutation(self.config.mutation_std)
-        self.genome_labels = tuple(genome_labels or PopulationConfig().genome_labels)
+        self.environment_config = environment_config or EnvironmentConfig()
+        self.fitness_config = fitness_config or FitnessConfig()
+        self.population_config = population_config or PopulationConfig()
+        validate_sim_config(SimConfig(individual=self.individual_config, spatial=self.config,
+                                      environment=self.environment_config, fitness=self.fitness_config,
+                                      population=self.population_config))
+        self.mutation_strategy = mutation_strategy or BaselineMutation(self.config.mutation_std)
+        self.genome_labels = tuple(genome_labels or self.population_config.genome_labels)
         if set(self.genome_labels) != set(PopulationConfig().genome_labels) or len(self.genome_labels) != 7:
             raise ValueError("spatial genome_labels must contain the seven classic traits")
         self.width = self.config.width
@@ -61,15 +58,19 @@ class SpatialWorld(mesa.Model):
         # Mesa treats max bounds as exclusive; nextafter includes our closed wall.
         self.space = ContinuousSpace(float(np.nextafter(self.width, np.inf)),
                                      float(np.nextafter(self.height, np.inf)), torus=False)
-        self.food_sources: list[FoodSource] = []
         self.step_count = 0
         self._pending_actions: Mapping[int, MoveAction] | None = None
         self._dead_count = 0
         self._dead_lifetime_sum = 0
         self.history: list[dict[str, float | int]] = []
         report_names = ("TimeStep", "PopulationSize", "AvgEnergy", "BirthCount",
-                        "Deaths_age", "Deaths_energy", "Deaths_total",
-                        "FoodAvailable", "AvgAge", "AvgLifespan")
+                        "Deaths_age", "Deaths_fitness", "Deaths_threshold",
+                        "Deaths_energy", "Deaths_competition", "Deaths_total", "AvgFitness",
+                        "AttacksConsidered", "AttacksDeclined", "AttacksStarted",
+                        "AttacksLost", "AttacksWon", "FoodStolen", "AttackEnergySpent",
+                        "Temperature", "HazardLevel",
+                        "FoodAvailable", "FoodSourceCount", "FoodSourcesDisappeared",
+                        "FoodSourcesSpawned", "AvgAge", "AvgLifespan")
         report_names += tuple("Avg" + "".join(part.title() for part in trait.split("_"))
                               for trait in self.genome_labels)
         self.datacollector = mesa.DataCollector(model_reporters={
@@ -77,29 +78,28 @@ class SpatialWorld(mesa.Model):
         })
         self.observation_provider = SpatialObservationProvider()
         self.policy = HeuristicPolicy()
-        self._generate_food()
+        self.attacks_this_step = {
+            "considered": 0, "declined": 0, "started": 0, "lost": 0,
+            "won": 0, "food_stolen": 0, "energy_spent": 0.0,
+        }
+        self.population = SpatialPopulation(self, self.config, self.population_config)
+        self.environment = SpatialEnvironment(self, self.config, self.environment_config)
         for _ in range(self.config.initial_population):
             self.add_organism(
                 self.rng.random(len(self.genome_labels)),
                 float(self.rng.uniform(0, self.width)),
                 float(self.rng.uniform(0, self.height)),
             )
-        self._record(0, 0, 0)
+        self._record(0, {cause: 0 for cause in ("age", "fitness", "threshold", "energy", "competition")})
 
     @property
     def organisms(self) -> dict[int, SpatialIndividual]:
         """ID lookup backed by Mesa's registered agents."""
         return {agent.unique_id: agent for agent in sorted(self.agents, key=lambda item: item.unique_id)}
 
-    def _generate_food(self) -> None:
-        cfg = self.config
-        for _ in range(cfg.cluster_count):
-            cx, cy = self.rng.uniform(0, self.width), self.rng.uniform(0, self.height)
-            for _ in range(cfg.sources_per_cluster):
-                x = float(np.clip(self.rng.normal(cx, cfg.cluster_spread), 0, self.width))
-                y = float(np.clip(self.rng.normal(cy, cfg.cluster_spread), 0, self.height))
-                self.food_sources.append(FoodSource(x, y, cfg.food_initial, cfg.food_capacity,
-                                                    cfg.food_regeneration, cfg.food_radius))
+    @property
+    def food_sources(self) -> list[FoodSource]:
+        return self.environment.food_sources
 
     def add_organism(self, genome: np.ndarray, x: float, y: float, *, energy: float | None = None,
                      heading: float | None = None, parent_ids: tuple[int, int] | None = None) -> SpatialIndividual:
@@ -136,13 +136,10 @@ class SpatialWorld(mesa.Model):
         return self.config.base_perception + self.config.perception_trait_scale * organism["resilience"]
 
     def nearest_food(self, x: float, y: float, radius: float) -> FoodSource | None:
-        candidates = ((hypot(food.x - x, food.y - y), index, food)
-                      for index, food in enumerate(self.food_sources) if food.stock > 0)
-        return next((food for distance, _, food in sorted(candidates) if distance <= radius), None)
+        return self.environment.nearest_food(x, y, radius)
 
     def update_resources(self) -> None:
-        for food in self.food_sources:
-            food.restore()
+        self.environment.update_resources()
 
     def _actions(self, supplied: Mapping[int, MoveAction] | None) -> dict[int, MoveAction]:
         organisms = self.organisms
@@ -178,56 +175,6 @@ class SpatialWorld(mesa.Model):
         self.space.move_agent(organism, (nx, ny))
         organism.spend_energy(travelled * self.config.movement_energy_cost)
 
-    def _feed(self) -> None:
-        requests: dict[int, list[SpatialIndividual]] = {}
-        organisms = self.organisms
-        for organism_id in sorted(organisms):
-            organism = organisms[organism_id]
-            state = organism.state
-            reachable = [(hypot(food.x - state.x, food.y - state.y), index)
-                         for index, food in enumerate(self.food_sources)
-                         if food.stock > 0 and hypot(food.x - state.x, food.y - state.y) <= food.radius]
-            if reachable and organism.energy < self.config.max_energy:
-                _, index = min(reachable)
-                requests.setdefault(index, []).append(organism)
-        for index in sorted(requests):
-            food = self.food_sources[index]
-            participants = requests[index]
-            share = min(self.config.food_bite, food.stock / len(participants))
-            for organism in participants:
-                organism.gain_energy(share * self.config.food_energy)
-            food.stock = max(0.0, food.stock - share * len(participants))
-
-    def _reproduce(self) -> int:
-        cfg = self.config
-        births = 0
-        organisms = self.organisms
-        parents = [organisms[key] for key in sorted(organisms)]
-        parent_ids = set(organisms)
-        for p1 in parents:
-            if len(self.agents) >= cfg.max_population:
-                break
-            if p1.gender != Gender.FEMALE or p1.age < cfg.min_reproduction_age or p1.energy < cfg.reproduction_energy:
-                continue
-            mates = sorted((p2 for p2 in self.space.get_neighbors(p1.pos, cfg.mating_radius)
-                            if p2.unique_id in parent_ids and p2 is not p1
-                            and p2.gender == Gender.MALE
-                            and p2.age >= cfg.min_reproduction_age and p2.energy > 0),
-                           key=lambda agent: agent.unique_id)
-            if not mates or self.rng.random() >= cfg.reproduction_rate * p1.satiation:
-                continue
-            p2 = mates[int(self.rng.integers(len(mates)))]
-            genome, _, _ = crossover_and_mutate(p1, p2, self)
-            direction = float(self.rng.uniform(-pi, pi))
-            offset = float(self.rng.uniform(0, cfg.offspring_offset))
-            x = float(np.clip(p1.state.x + offset * cos(direction), 0, self.width))
-            y = float(np.clip(p1.state.y + offset * sin(direction), 0, self.height))
-            self.add_organism(genome, x, y, energy=cfg.offspring_energy,
-                              parent_ids=(p1.unique_id, p2.unique_id))
-            p1.spend_energy(cfg.offspring_energy)
-            births += 1
-        return births
-
     def _wrapped_step(self, actions: Mapping[int, MoveAction] | None = None) -> dict[str, float | int]:
         """Accept external actions while Mesa advances its own time and schedule."""
         if actions is not None:
@@ -244,7 +191,10 @@ class SpatialWorld(mesa.Model):
         return self.history[-1]
 
     def step(self) -> None:
-        """Actions, movement, costs, food, deaths, births, regrowth, statistics."""
+        """Climate, actions, movement, costs, food, fitness/deaths, births, resources, statistics."""
+        for key in self.attacks_this_step:
+            self.attacks_this_step[key] = 0
+        self.environment.step()
         chosen = self._actions(self._pending_actions)
         organisms = self.organisms
         for organism_id in sorted(organisms):
@@ -252,40 +202,42 @@ class SpatialWorld(mesa.Model):
         for organism_id in sorted(organisms):
             organism = organisms[organism_id]
             organism.spend_energy(organism.metabolic_cost())
-            organism.age += 1
-        self._feed()
-        for organism_id in sorted(organisms):
-            organism = organisms[organism_id]
-            if organism.energy <= 0:
-                organism.is_alive = False
-                organism.death_cause = DeathCause.ENERGY
-            elif self.rng.random() < organism.age_death_probability():
-                organism.is_alive = False
-                organism.death_cause = DeathCause.AGE
-        dead = [organism_id for organism_id in sorted(organisms) if not organisms[organism_id].is_alive]
-        deaths_age = sum(organisms[key].death_cause == DeathCause.AGE for key in dead)
-        deaths_energy = len(dead) - deaths_age
-        for organism_id in dead:
-            self._dead_lifetime_sum += organisms[organism_id].age
-            self._dead_count += 1
-            self.remove_organism(organism_id)
-        births = self._reproduce()
+        self.environment.food_distribution()
+        deaths = self.population.remove_dead()
+        births = self.population.reproduce()
         self.update_resources()
         self.step_count += 1
-        self._record(births, deaths_age, deaths_energy)
+        self._record(births, deaths)
 
-    def _record(self, births: int, deaths_age: int, deaths_energy: int) -> dict[str, float | int]:
+    def _record(self, births: int, deaths: dict[str, int]) -> dict[str, float | int]:
         organisms = list(self.organisms.values())
         count = len(organisms)
+        evaluated = [o.fitness for o in organisms if o.fitness is not None]
         row: dict[str, float | int] = {
             "TimeStep": self.step_count,
             "PopulationSize": count,
             "AvgEnergy": sum(o.energy for o in organisms) / count if count else 0.0,
+            "AvgFitness": float(sum(evaluated) / len(evaluated)) if evaluated else 0.0,
+            "Temperature": self.environment.current_params["temperature"],
+            "HazardLevel": self.environment.current_params["hazard_level"],
             "BirthCount": births,
-            "Deaths_age": deaths_age,
-            "Deaths_energy": deaths_energy,
-            "Deaths_total": deaths_age + deaths_energy,
+            "Deaths_age": deaths["age"],
+            "Deaths_fitness": deaths["fitness"],
+            "Deaths_threshold": deaths["threshold"],
+            "Deaths_energy": deaths["energy"],
+            "Deaths_competition": deaths["competition"],
+            "Deaths_total": sum(deaths.values()),
+            "AttacksConsidered": self.attacks_this_step["considered"],
+            "AttacksDeclined": self.attacks_this_step["declined"],
+            "AttacksStarted": self.attacks_this_step["started"],
+            "AttacksLost": self.attacks_this_step["lost"],
+            "AttacksWon": self.attacks_this_step["won"],
+            "FoodStolen": self.attacks_this_step["food_stolen"],
+            "AttackEnergySpent": self.attacks_this_step["energy_spent"],
             "FoodAvailable": sum(food.stock for food in self.food_sources),
+            "FoodSourceCount": len(self.food_sources),
+            "FoodSourcesDisappeared": self.environment.disappeared_this_step,
+            "FoodSourcesSpawned": self.environment.spawned_this_step,
             "AvgAge": sum(o.age for o in organisms) / count if count else 0.0,
             "AvgLifespan": self._dead_lifetime_sum / self._dead_count if self._dead_count else 0.0,
         }

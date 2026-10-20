@@ -1,12 +1,14 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from math import cos, pi, sin
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .model import Model
+    from .spatial import SpatialWorld
 
 import numpy as np
-from config.sim_config import PopulationConfig
+from config.sim_config import PopulationConfig, SpatialConfig
 from .enums import DeathCause, Gender
 from .fitness import batch_fitness
 from .genetics import crossover_and_mutate
@@ -365,12 +367,12 @@ class Population:
 
         self.invalidate_metrics()
         females = list(a for a in self.model.agents if
-                       a.is_alive and a.fitness is not None and a.gender == Gender.FEMALE
-                       and a.age >= self.config.min_reproduction_age
-                       and a.energy >= self.config.reproduction_energy_cost)
+                       a.can_reproduce(self.config.min_reproduction_age, self.config.reproduction_energy_cost)
+                       and a.fitness is not None and a.gender == Gender.FEMALE)
 
         males = list(a for a in self.model.agents if
-                     a.is_alive and a.fitness is not None and a.gender == Gender.MALE and a.age >= self.config.min_reproduction_age)
+                     a.can_reproduce(self.config.min_reproduction_age, 0)
+                     and a.fitness is not None and a.gender == Gender.MALE)
 
         if not females or not males:
             return
@@ -378,11 +380,7 @@ class Population:
         male_weights = self._selection_weights(males)
 
         for p1 in females:
-            birth_probability = np.clip(
-                self.config.reproduction_rate * p1.satiation,
-                0.0,
-                1.0,
-            )
+            birth_probability = p1.reproduction_probability(self.config.reproduction_rate)
             if self.model.rng.random() >= birth_probability:
                 continue
 
@@ -458,3 +456,76 @@ class Population:
         self.remove_dead()
         self.time_step += 1
         self.reproduce()
+
+
+class SpatialPopulation(Population):
+    """Use baseline agents and genetic operators with local spatial parent choice."""
+
+    def __init__(self, model: SpatialWorld, config: SpatialConfig,
+                 population_config: PopulationConfig | None = None):
+        baseline_config = replace(population_config or PopulationConfig(),
+                                  genome_labels=list(model.genome_labels))
+        super().__init__(model, baseline_config)
+        self.spatial_config = config
+
+    def remove_dead(self) -> dict[str, int]:
+        organisms = self.model.organisms
+        for agent in organisms.values():
+            if not agent.is_alive:
+                continue
+            if agent.energy <= 0:
+                agent.is_alive = False
+                agent.death_cause = DeathCause.ENERGY
+                agent.age += 1
+            else:
+                agent.fitness = agent.compute_fitness()
+                agent.apply_fitness_outcome()
+        dead = [agent for agent in organisms.values() if not agent.is_alive]
+        deaths = {
+            "age": sum(agent.death_cause == DeathCause.AGE for agent in dead),
+            "fitness": sum(agent.death_cause == DeathCause.FITNESS for agent in dead),
+            "threshold": sum(agent.death_cause == DeathCause.THRESHOLD for agent in dead),
+            "energy": sum(agent.death_cause == DeathCause.ENERGY for agent in dead),
+            "competition": sum(agent.death_cause == DeathCause.COMPETITION for agent in dead),
+        }
+        for agent in dead:
+            self.model._dead_lifetime_sum += agent.age
+            self.model._dead_count += 1
+            self.model.remove_organism(agent.unique_id)
+        self.invalidate_metrics()
+        if dead:
+            self.invalidate_batch_cache()
+        return deaths
+
+    def reproduce(self) -> int:
+        cfg = self.spatial_config
+        births = 0
+        parents = list(self.model.organisms.values())
+        parent_ids = {agent.unique_id for agent in parents}
+        for mother in parents:
+            if len(self.model.agents) >= cfg.max_population:
+                break
+            if mother.gender != Gender.FEMALE or not mother.can_reproduce(
+                    cfg.min_reproduction_age, cfg.reproduction_energy):
+                continue
+            mates = sorted((father for father in self.model.space.get_neighbors(mother.pos, cfg.mating_radius)
+                            if father.unique_id in parent_ids and father is not mother
+                            and father.gender == Gender.MALE
+                            and father.can_reproduce(cfg.min_reproduction_age, 0)),
+                           key=lambda agent: agent.unique_id)
+            if not mates or self.model.rng.random() >= mother.reproduction_probability(cfg.reproduction_rate):
+                continue
+            father = mates[int(self.model.rng.choice(len(mates), p=self._selection_weights(mates)))]
+            genome, _, _ = crossover_and_mutate(mother, father, self.model)
+            direction = float(self.model.rng.uniform(-pi, pi))
+            offset = float(self.model.rng.uniform(0, cfg.offspring_offset))
+            x = float(np.clip(mother.state.x + offset * cos(direction), 0, cfg.width))
+            y = float(np.clip(mother.state.y + offset * sin(direction), 0, cfg.height))
+            self.model.add_organism(genome, x, y, energy=cfg.offspring_energy,
+                                    parent_ids=(mother.unique_id, father.unique_id))
+            mother.spend_energy(cfg.offspring_energy)
+            births += 1
+        self.invalidate_metrics()
+        if births:
+            self.invalidate_batch_cache()
+        return births

@@ -21,7 +21,8 @@ def main(cfg: SimConfig) -> None:
 
     if cfg.mode == "spatial":
         world = SpatialWorld(cfg.spatial, seed=cfg.seed, genome_labels=cfg.population.genome_labels,
-                             individual_config=cfg.individual)
+                             individual_config=cfg.individual, environment_config=cfg.environment,
+                             fitness_config=cfg.fitness, population_config=cfg.population)
         if cfg.view:
             snapshots = collect_spatial_snapshots(world, cfg.n_steps, cfg.spatial_view_interval)
             path = save_spatial_figure(build_spatial_figure(world, snapshots), cfg.spatial_html)

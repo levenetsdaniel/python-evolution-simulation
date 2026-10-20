@@ -12,7 +12,7 @@ from core.spatial import SpatialWorld
 @dataclass(frozen=True)
 class SpatialSnapshot:
     step: int
-    organisms: tuple[tuple[int, float, float, float, int], ...]
+    organisms: tuple[tuple[int, float, float, float, int, float | None], ...]
     food: tuple[tuple[float, float, float, float], ...]
 
 
@@ -21,7 +21,7 @@ def capture_spatial_snapshot(world: SpatialWorld) -> SpatialSnapshot:
     return SpatialSnapshot(
         step=world.step_count,
         organisms=tuple((organism.unique_id, organism.state.x, organism.state.y,
-                         organism.energy, organism.age)
+                         organism.energy, organism.age, organism.fitness)
                         for _, organism in sorted(world.organisms.items())),
         food=tuple((source.x, source.y, source.stock, source.capacity)
                    for source in world.food_sources),
@@ -68,8 +68,8 @@ def _organism_trace(snapshot: SpatialSnapshot, max_energy: float) -> go.Scatter:
                 "colorscale": "Turbo", "cmin": 0, "cmax": max_energy,
                 "colorbar": {"title": "Энергия"},
                 "line": {"color": "#182b46", "width": 0.4}},
-        customdata=[[item[0], item[3], item[4]] for item in snapshot.organisms],
-        hovertemplate="ID %{customdata[0]}<br>Энергия %{customdata[1]:.1f}<br>Возраст %{customdata[2]}<br>x=%{x:.1f}, y=%{y:.1f}<extra></extra>",
+        customdata=[[item[0], item[3], item[4], item[5]] for item in snapshot.organisms],
+        hovertemplate="ID %{customdata[0]}<br>Энергия %{customdata[1]:.1f}<br>Возраст %{customdata[2]}<br>Fitness %{customdata[3]:.3f}<br>x=%{x:.1f}, y=%{y:.1f}<extra></extra>",
     )
 
 
@@ -106,7 +106,9 @@ def build_spatial_figure(world: SpatialWorld, snapshots: list[SpatialSnapshot]) 
                   population, food_history],
             traces=[0, 1, 2, 3],
             layout=go.Layout(title_text=f"Пространственная симуляция · шаг {snapshot.step} · "
-                                        f"организмов {len(snapshot.organisms)}"),
+                                        f"организмов {len(snapshot.organisms)} · "
+                                        f"температура {world.history[snapshot.step]['Temperature']:.1f} · "
+                                        f"опасность {world.history[snapshot.step]['HazardLevel']:.2f}"),
         ))
     fig.frames = frames
     fig.update_xaxes(title_text="X", range=[0, world.width], row=1, col=1)
