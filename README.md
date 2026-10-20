@@ -122,8 +122,38 @@ python3 main.py environment=warming n_steps=300 spatial_csv=artifacts/spatial_hi
 кандидатов выбираются с весами по fitness, как в baseline. Мутация по умолчанию
 остаётся случайной (`spatial.mutation_std`): отбор по fitness может сдвигать
 средние признаки популяции, но мутация сама не знает «нужного» направления.
-Для будущей направленной стратегии можно передать `mutation_strategy` в
-`SpatialWorld`; CatBoost пока подключён только к отдельному сравнению baseline.
+Для собственной направленной стратегии можно передать `mutation_strategy` в
+`SpatialWorld`. Для существующей CatBoost-стратегии есть отдельный переключатель:
+
+```bash
+python3 main.py spatial_guidance.enabled=true n_steps=300 seed=42 \
+  spatial_guidance.training_steps=100 spatial_guidance.iterations=100 \
+  spatial_guidance.retrain_steps=50 \
+  spatial_guidance.shift_strength=0.7 \
+  spatial_guidance.save_path=artifacts/models/spatial_advisor.cbm
+```
+
+Сначала отдельный spatial прогон с обычной мутацией собирает рождения и fitness
+потомков в `TrainingBuffer`. По ним обучается тот же `CatBoostAdvisor`, что в
+классическом сравнении. После этого новый мир с тем же seed запускается с
+`GuidedMutation`; число шагов основного прогона задаёт `n_steps`. Обучение не
+запускается в режиме по умолчанию. Готовый advisor можно подключить без обучения:
+
+```bash
+python3 main.py spatial_guidance.enabled=true n_steps=300 seed=42 \
+  spatial_guidance.advisor_path=artifacts/models/spatial_advisor.cbm
+```
+
+Для загружаемой модели используйте тот же порядок генов и сопоставимые настройки
+температуры и ёмкости пищи, что при её обучении. Пища нормируется на суммарную
+ёмкость источников пространственного мира. Если обучающий прогон не дал потомков
+с оценённым fitness, запуск сообщит об этом; увеличьте `training_steps` или
+проверьте условия размножения. Каждые `spatial_guidance.retrain_steps` шагов
+(по умолчанию 50) советчик продолжает обучение на новых потомках, чей fitness
+уже измерен. Если за интервал нет таких записей, обновление пропускается, а
+данные ожидают следующего интервала. С `save_path` модель сохраняется и после
+каждого успешного дообучения. В конце запуска выводятся номера шагов, на которых
+оно произошло. Это работает и при `view=true`.
 
 Классический запуск и эксперименты с CatBoost остаются доступны через
 `python3 main.py mode=classic` и прежние команды сравнения.
@@ -140,7 +170,8 @@ python3 main.py environment=warming n_steps=300 spatial_csv=artifacts/spatial_hi
 отдельно для будущего подключения других источников наблюдений и политик.
 
 Текущие ограничения: нет регионов с разным климатом, зрения, нейросетевой
-политики, хищничества и интеграции CatBoost с пространственным режимом.
+политики и хищничества. Пространственный guided запуск пока не выполняет
+параллельного сравнения с baseline.
 Шаги дискретны по времени;
 скорость задаёт максимальное перемещение за один шаг.
 
@@ -248,11 +279,16 @@ evosim/
 git clone https://github.com/levenetsdaniel/python-evolution-simulation
 cd evosim
 
-python3 -m venv .venv
+python3.13 -m venv .venv
 source .venv/bin/activate
 
 pip install -r requirements.txt
 ```
+
+Для запуска через Hydra 1.3 используйте Python 3.13: в Python 3.14
+`hydra-core` 1.3 вызывает ошибку `LazyCompletionHelp` ещё до старта симуляции.
+Если активна Conda с Python 3.14, создайте окружение командой выше и запускайте
+`main.py` после `source .venv/bin/activate`.
 
 ### Точки входа
 

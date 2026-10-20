@@ -29,11 +29,14 @@ class TrainingBuffer:
     MAX_TEMPERATURE = EnvironmentConfig().max_temperature
     MAX_FOOD = EnvironmentConfig().food_availability
 
-    def __init__(self, environment_config: EnvironmentConfig | None = None):
+    def __init__(self, environment_config: EnvironmentConfig | None = None,
+                 max_food: float | None = None):
         environment_config = environment_config or EnvironmentConfig()
         self.min_temperature = environment_config.min_temperature
         self.max_temperature = environment_config.max_temperature
-        self.max_food = environment_config.food_availability
+        self.max_food = environment_config.food_availability if max_food is None else max_food
+        if self.max_food <= 0:
+            raise ValueError("max_food must be positive")
         self.samples: list[TrainingSample] = []
         self._pending: dict[int, TrainingSample] = {}
 

@@ -108,6 +108,19 @@ class SpatialConfig:
 
 
 @dataclass
+class SpatialGuidanceConfig:
+    """Optional CatBoost guidance for spatial offspring mutations."""
+
+    enabled: bool = False
+    training_steps: int = 100
+    retrain_steps: int = 50
+    iterations: int = 100
+    shift_strength: float = 0.7
+    advisor_path: str = ""
+    save_path: str = ""
+
+
+@dataclass
 class SimConfig:
     """Simulation configuration. Aggregates all sub-configs."""
 
@@ -116,6 +129,7 @@ class SimConfig:
     individual: IndividualConfig = field(default_factory=IndividualConfig)
     fitness: FitnessConfig = field(default_factory=FitnessConfig)
     spatial: SpatialConfig = field(default_factory=SpatialConfig)
+    spatial_guidance: SpatialGuidanceConfig = field(default_factory=SpatialGuidanceConfig)
     mode: str = "spatial"
     spatial_csv: str = ""
     spatial_html: str = "artifacts/plots/spatial/world.html"
@@ -253,7 +267,14 @@ def validate_sim_config(config: SimConfig) -> None:
     _require(config.n_steps >= 0, "n_steps must be non-negative")
     _require(config.steps_info >= 0, "steps_info must be non-negative")
     _require(config.mode in ("classic", "spatial"), "mode must be classic or spatial")
+    _require(not config.spatial_guidance.enabled or config.mode == "spatial",
+             "spatial_guidance requires mode=spatial")
     _require(config.spatial_view_interval >= 1, "spatial_view_interval must be positive")
+    _require(config.spatial_guidance.training_steps >= 1, "spatial_guidance.training_steps must be positive")
+    _require(config.spatial_guidance.retrain_steps >= 1, "spatial_guidance.retrain_steps must be positive")
+    _require(config.spatial_guidance.iterations >= 1, "spatial_guidance.iterations must be positive")
+    _require(0 <= config.spatial_guidance.shift_strength <= 1,
+             "spatial_guidance.shift_strength must be in [0, 1]")
     validate_spatial_config(config.spatial)
 
     for name, value in _numeric_fields(config):
@@ -261,7 +282,7 @@ def validate_sim_config(config: SimConfig) -> None:
 
 
 def _numeric_fields(config: SimConfig):
-    for group_name in ("environment", "population", "individual", "fitness", "spatial"):
+    for group_name in ("environment", "population", "individual", "fitness", "spatial", "spatial_guidance"):
         group = getattr(config, group_name)
         for name, value in vars(group).items():
             if isinstance(value, (int, float)):

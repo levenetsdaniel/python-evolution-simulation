@@ -516,14 +516,15 @@ class SpatialPopulation(Population):
             if not mates or self.model.rng.random() >= mother.reproduction_probability(cfg.reproduction_rate):
                 continue
             father = mates[int(self.model.rng.choice(len(mates), p=self._selection_weights(mates)))]
-            genome, _, _ = crossover_and_mutate(mother, father, self.model)
+            genome, pre_mutation_genome, mutation_deltas = crossover_and_mutate(mother, father, self.model)
             direction = float(self.model.rng.uniform(-pi, pi))
             offset = float(self.model.rng.uniform(0, cfg.offspring_offset))
             x = float(np.clip(mother.state.x + offset * cos(direction), 0, cfg.width))
             y = float(np.clip(mother.state.y + offset * sin(direction), 0, cfg.height))
-            self.model.add_organism(genome, x, y, energy=cfg.offspring_energy,
-                                    parent_ids=(mother.unique_id, father.unique_id))
+            child = self.model.add_organism(genome, x, y, energy=cfg.offspring_energy,
+                                            parent_ids=(mother.unique_id, father.unique_id))
             mother.spend_energy(cfg.offspring_energy)
+            self.record_birth(child.unique_id, mother, father, pre_mutation_genome, mutation_deltas)
             births += 1
         self.invalidate_metrics()
         if births:

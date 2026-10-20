@@ -18,6 +18,7 @@ from config.sim_config import (EnvironmentConfig, FitnessConfig, IndividualConfi
 from .environment import FoodSource, SpatialEnvironment
 from .mutation_patterns import BaselineMutation, MutationStrategy
 from .population import SpatialPopulation
+from .recording import EvolutionRecorder
 from .spatial_individual import SpatialIndividual, SpatialState
 from .spatial_policy import (FoodObservation, HeuristicPolicy, MoveAction,
                              SpatialObservation, SpatialObservationProvider)
@@ -36,7 +37,8 @@ class SpatialWorld(mesa.Model):
                  environment_config: EnvironmentConfig | None = None,
                  fitness_config: FitnessConfig | None = None,
                  mutation_strategy: MutationStrategy | None = None,
-                 population_config: PopulationConfig | None = None):
+                 population_config: PopulationConfig | None = None,
+                 recorder: EvolutionRecorder | None = None):
         self.config = config or SpatialConfig()
         validate_spatial_config(self.config)
         super().__init__(rng=seed)
@@ -50,12 +52,12 @@ class SpatialWorld(mesa.Model):
                                       environment=self.environment_config, fitness=self.fitness_config,
                                       population=self.population_config))
         self.mutation_strategy = mutation_strategy or BaselineMutation(self.config.mutation_std)
+        self.recorder = recorder
         self.genome_labels = tuple(genome_labels or self.population_config.genome_labels)
         if set(self.genome_labels) != set(PopulationConfig().genome_labels) or len(self.genome_labels) != 7:
             raise ValueError("spatial genome_labels must contain the seven classic traits")
         self.width = self.config.width
         self.height = self.config.height
-        # Mesa treats max bounds as exclusive; nextafter includes our closed wall.
         self.space = ContinuousSpace(float(np.nextafter(self.width, np.inf)),
                                      float(np.nextafter(self.height, np.inf)), torus=False)
         self.step_count = 0
@@ -91,6 +93,19 @@ class SpatialWorld(mesa.Model):
                 float(self.rng.uniform(0, self.height)),
             )
         self._record(0, {cause: 0 for cause in ("age", "fitness", "threshold", "energy", "competition")})
+
+    @classmethod
+    def from_sim_config(cls, config: SimConfig, *,
+                        mutation_strategy: MutationStrategy | None = None,
+                        recorder: EvolutionRecorder | None = None) -> SpatialWorld:
+        """Bind the shared simulation settings to a spatial world."""
+        return cls(config.spatial, seed=config.seed,
+                   genome_labels=config.population.genome_labels,
+                   individual_config=config.individual,
+                   environment_config=config.environment,
+                   fitness_config=config.fitness,
+                   population_config=config.population,
+                   mutation_strategy=mutation_strategy, recorder=recorder)
 
     @property
     def organisms(self) -> dict[int, SpatialIndividual]:

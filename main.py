@@ -20,9 +20,11 @@ def main(cfg: SimConfig) -> None:
     cfg = OmegaConf.to_object(cfg)
 
     if cfg.mode == "spatial":
-        world = SpatialWorld(cfg.spatial, seed=cfg.seed, genome_labels=cfg.population.genome_labels,
-                             individual_config=cfg.individual, environment_config=cfg.environment,
-                             fitness_config=cfg.fitness, population_config=cfg.population)
+        if cfg.spatial_guidance.enabled:
+            from neural.spatial_guidance import build_guided_spatial_world
+            world = build_guided_spatial_world(cfg)
+        else:
+            world = SpatialWorld.from_sim_config(cfg)
         if cfg.view:
             snapshots = collect_spatial_snapshots(world, cfg.n_steps, cfg.spatial_view_interval)
             path = save_spatial_figure(build_spatial_figure(world, snapshots), cfg.spatial_html)
@@ -31,6 +33,8 @@ def main(cfg: SimConfig) -> None:
             world.run(cfg.n_steps)
         if cfg.spatial_csv:
             world.export_csv(cfg.spatial_csv)
+        if cfg.spatial_guidance.enabled:
+            print(f"Advisor retrained at steps: {world.retraining_steps}")
         print(world.history[-1])
         return
 

@@ -20,10 +20,10 @@ class GuidedMutation(MutationStrategy):
     def mutate(self, pre_genome: np.ndarray, p1: Individual, p2: Individual, model) -> tuple[np.ndarray, np.ndarray]:
         env_params = model.environment.current_params
         prev_env_params = model.environment.prev_params
-        env_config = model.config.environment
+        env_config = model.environment.config
         min_temp = env_config.min_temperature
         temp_range = env_config.max_temperature - min_temp
-        max_food = env_config.food_availability
+        max_food = max(float(model.environment.food_capacity), 1.0)
 
         env_vec = [
             (env_params["temperature"] - min_temp) / temp_range,
@@ -43,6 +43,9 @@ class GuidedMutation(MutationStrategy):
         pop_mean_genome = np.mean([a.genome for a in alive], axis=0)
         pop_mean_fitness = model.population.avg_fitness
         parent_mean_fitness = (p1.fitness + p2.fitness) / 2.0
+        mutation_std = getattr(model.config, "mutation_std", None)
+        if mutation_std is None:
+            mutation_std = model.config.population.mutation_std
 
         return neural_mutate(
             pre_mutation_genome=pre_genome,
@@ -53,7 +56,9 @@ class GuidedMutation(MutationStrategy):
             pop_mean_fitness=pop_mean_fitness,
             parent_mean_fitness=parent_mean_fitness,
             shift_strength=self._shift_strength,
+            rng=model.rng,
+            mutation_std=mutation_std,
         )
 
-    def retrain(self, training_buffer: TrainingBuffer) -> None:
-        train_advisor(training_buffer, self._advisor)
+    def retrain(self, training_buffer: TrainingBuffer, *, continue_training: bool = False) -> None:
+        train_advisor(training_buffer, self._advisor, continue_training=continue_training)

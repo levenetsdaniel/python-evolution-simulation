@@ -7,6 +7,8 @@ from neural.training_buffer import TrainingBuffer
 def train_advisor(
         buffer: TrainingBuffer,
         advisor: CatBoostAdvisor,
+        *,
+        continue_training: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Train the advisor on buffer samples and return the training arrays.
@@ -24,6 +26,9 @@ def train_advisor(
 
     target_genomes = np.clip(pre_genomes + mutation_deltas, 0.0, 1.0)
 
-    advisor.fit(X, target_genomes, weights)
+    if continue_training:
+        advisor.fit(X, target_genomes, weights, continue_training=True)
+    else:
+        advisor.fit(X, target_genomes, weights)
 
     return X, target_genomes, weights

@@ -10,7 +10,8 @@ import comparison_run
 import main as main_entry
 from config.output_paths import SIMULATION_PLOTS_DIR
 from config.scenarios import SCENARIOS
-from config.sim_config import ComparisonConfig, EnvironmentConfig, IndividualConfig, SimConfig
+from config.sim_config import (ComparisonConfig, EnvironmentConfig, IndividualConfig,
+                               SimConfig, SpatialGuidanceConfig)
 from core.enums import RunStatus
 from core.model import Model, SimulationResult
 from vis.history import collect_history
@@ -29,6 +30,30 @@ def test_core_model_runs_without_recorder():
 def test_spatial_is_default_and_classic_remains_explicit():
     assert SimConfig().mode == "spatial"
     assert SimConfig(mode="classic").mode == "classic"
+
+
+def test_main_guided_spatial_selects_guidance_builder(monkeypatch):
+    import neural.spatial_guidance as spatial_guidance
+
+    calls = {}
+
+    class StubWorld:
+        history = [{"TimeStep": 0}]
+        retraining_steps = []
+
+        def run(self, steps):
+            calls["steps"] = steps
+
+    def build(config):
+        calls["config"] = config
+        return StubWorld()
+
+    monkeypatch.setattr(spatial_guidance, "build_guided_spatial_world", build)
+    cfg = OmegaConf.structured(SimConfig(n_steps=3,
+                                         spatial_guidance=SpatialGuidanceConfig(enabled=True)))
+    main_entry.main.__wrapped__(cfg)
+    assert calls["steps"] == 3
+    assert calls["config"].spatial_guidance.enabled
 
 
 def test_agent_history_is_disabled_unless_explicitly_requested():

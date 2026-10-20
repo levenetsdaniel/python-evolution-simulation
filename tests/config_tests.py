@@ -13,6 +13,7 @@ from config.sim_config import (
     IndividualConfig,
     PopulationConfig,
     SimConfig,
+    SpatialGuidanceConfig,
     validate_sim_config,
 )
 
@@ -35,6 +36,16 @@ def test_sim_config_contains_all_runtime_subconfigs():
     assert cfg.population.initial_size == 100
     assert cfg.individual.age_scale == 80.0
     assert cfg.fitness.score_floor == 0.05
+    assert not cfg.spatial_guidance.enabled
+
+
+def test_sim_config_allows_spatial_guidance_overrides():
+    cfg = _compose("sim_config", ["spatial_guidance.enabled=true",
+                                  "spatial_guidance.training_steps=25",
+                                  "spatial_guidance.shift_strength=0.4"])
+    assert cfg.spatial_guidance.enabled
+    assert cfg.spatial_guidance.training_steps == 25
+    assert cfg.spatial_guidance.shift_strength == 0.4
 
 
 def test_sim_config_allows_environment_group_override():
@@ -137,6 +148,9 @@ def test_resource_stress_scenarios_use_limited_regeneration():
         SimConfig(individual=IndividualConfig(energy_capacity=0.0)),
         SimConfig(individual=IndividualConfig(energy_initial=101.0)),
         SimConfig(n_steps=-1),
+        SimConfig(spatial_guidance=SpatialGuidanceConfig(enabled=True, training_steps=0)),
+        SimConfig(spatial_guidance=SpatialGuidanceConfig(enabled=True, shift_strength=1.1)),
+        SimConfig(mode="classic", spatial_guidance=SpatialGuidanceConfig(enabled=True)),
     ],
 )
 def test_validate_sim_config_rejects_invalid_values(config):
