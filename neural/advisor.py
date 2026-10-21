@@ -61,8 +61,6 @@ class CatBoostAdvisor:
         X: np.ndarray,
         y: np.ndarray,
         weights: np.ndarray | None = None,
-        *,
-        continue_training: bool = False,
     ) -> None:
         """
         Train the advisor on feature vectors and target genomes.
@@ -74,8 +72,6 @@ class CatBoostAdvisor:
             Target genome matrix of shape (n_samples, genome_size).
         - weights : np.ndarray | None
             Optional sample weights used during training.
-        - continue_training : bool
-            Append trees to the trained model using new samples.
         """
         X = np.asarray(X, dtype=np.float32)
         y = np.asarray(y, dtype=np.float32)
@@ -83,8 +79,7 @@ class CatBoostAdvisor:
         if weights is not None:
             weights = np.asarray(weights, dtype=np.float32)
 
-        previous_model = self.model if continue_training and self._is_trained else None
-        self.model.fit(X, y, sample_weight=weights, init_model=previous_model)
+        self.model.fit(X, y, sample_weight=weights)
         self._is_trained = True
 
     def predict(self, feature_vector: np.ndarray) -> np.ndarray:

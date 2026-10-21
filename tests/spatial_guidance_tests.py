@@ -12,7 +12,6 @@ from core.spatial import MoveAction, SpatialWorld
 from neural.guided_mutation import GuidedMutation
 from neural.spatial_guidance import build_guided_spatial_world
 from neural.training_buffer import TrainingBuffer
-from vis.spatial import collect_spatial_snapshots
 
 
 def parent_world(*, strategy=None, recorder=None):
@@ -84,91 +83,56 @@ def test_guided_mutation_still_accepts_classic_model():
     assert advisor.features[8] == pytest.approx(1)
 
 
-def test_guided_spatial_world_trains_saves_and_loads(tmp_path):
-    path = tmp_path / "spatial_advisor.cbm"
-    config = SimConfig(n_steps=5, seed=42,
-                       spatial_guidance=SpatialGuidanceConfig(enabled=True, training_steps=15,
-                                                              iterations=5, save_path=str(path)))
-    trained = build_guided_spatial_world(config)
-    assert path.exists()
-    assert trained.step_count == 0
-    assert isinstance(trained.mutation_strategy, GuidedMutation)
-    assert trained.mutation_strategy._advisor.is_trained
-    trained.run(config.n_steps)
+@pytest.fixture(scope="module")
+def pretrained_spatial(tmp_path_factory):
+    from config.sim_config import AdvisorTrainingConfig
+    from neural.advisor_training import train_advisor_model
 
-    loaded_config = replace(config, spatial_guidance=replace(config.spatial_guidance,
-                                                              advisor_path=str(path), save_path="",
-                                                              training_steps=1))
-    loaded = build_guided_spatial_world(loaded_config)
-    loaded.run(config.n_steps)
-    assert trained.history == loaded.history
+    path = tmp_path_factory.mktemp("spatial_advisor") / "advisor.cbm"
+    training = SimConfig(seed=42, n_steps=15)
+    advisor, _ = train_advisor_model(AdvisorTrainingConfig(
+        simulation=training, iterations=5, save_path=str(path)))
+    config = replace(training, spatial_guidance=SpatialGuidanceConfig(enabled=True, advisor_path=str(path)))
+    return config, path, advisor
 
 
-def test_guided_spatial_world_retrains_on_new_offspring_and_saves(tmp_path):
-    path = tmp_path / "updated.cbm"
-    config = SimConfig(seed=42, spatial_guidance=SpatialGuidanceConfig(
-        enabled=True, training_steps=15, retrain_steps=2,
-        iterations=5, save_path=str(path)))
+def test_guided_spatial_world_only_loads_and_never_fits(pretrained_spatial, monkeypatch):
+    from neural.advisor import CatBoostAdvisor
+
+    config, path, _ = pretrained_spatial
+
+    def no_fit(*args, **kwargs):
+        raise AssertionError("Simulation must never fit the advisor")
+
+    monkeypatch.setattr(CatBoostAdvisor, "fit", no_fit)
+    before_file = path.read_bytes()
     world = build_guided_spatial_world(config)
-    initial_trees = world.advisor.model.tree_count_
-    initial_file = path.read_bytes()
-
-    snapshots = collect_spatial_snapshots(world, 6, 2)
-
-    assert [snapshot.step for snapshot in snapshots] == [0, 2, 4, 6]
-    assert world.retraining_steps == [4, 6]
-    assert world.advisor.model.tree_count_ == initial_trees + 2 * config.spatial_guidance.iterations
-    assert path.read_bytes() != initial_file
-    assert world.recorder.samples == []
+    advisor = world.mutation_strategy._advisor
+    before_leaves = advisor.model.get_leaf_values().copy()
+    before_trees = advisor.model.tree_count_
+    assert world.step_count == 0 and world.recorder is None
+    world.run(60)
+    assert advisor.model.tree_count_ == before_trees
+    np.testing.assert_array_equal(advisor.model.get_leaf_values(), before_leaves)
+    assert path.read_bytes() == before_file
 
 
-def test_guided_spatial_world_skips_empty_retraining_intervals(tmp_path):
-    path = tmp_path / "loaded.cbm"
-    trained = build_guided_spatial_world(SimConfig(spatial_guidance=SpatialGuidanceConfig(
-        enabled=True, training_steps=15, iterations=5, save_path=str(path))))
-    config = SimConfig(spatial=SpatialConfig(initial_population=0, cluster_count=0),
-                       spatial_guidance=SpatialGuidanceConfig(
-                           enabled=True, advisor_path=str(path), retrain_steps=1, iterations=5))
-    world = build_guided_spatial_world(config)
-    initial_trees = world.advisor.model.tree_count_
-
-    world.run(3)
-
-    assert world.retraining_steps == []
-    assert world.advisor.model.tree_count_ == initial_trees
-
-
-def test_loaded_spatial_advisor_continues_training(tmp_path):
-    path = tmp_path / "advisor.cbm"
-    build_guided_spatial_world(SimConfig(spatial_guidance=SpatialGuidanceConfig(
-        enabled=True, training_steps=15, iterations=5, save_path=str(path))))
-    config = SimConfig(seed=42, spatial_guidance=SpatialGuidanceConfig(
-        enabled=True, advisor_path=str(path), retrain_steps=2, iterations=5))
-    world = build_guided_spatial_world(config)
-    initial_trees = world.advisor.model.tree_count_
-
-    world.run(4)
-
-    assert world.retraining_steps == [4]
-    assert world.advisor.model.tree_count_ == initial_trees + config.spatial_guidance.iterations
-
-
-def test_guided_spatial_retrain_interval_must_be_positive():
-    config = SimConfig(spatial_guidance=SpatialGuidanceConfig(enabled=True, retrain_steps=0))
-    with pytest.raises(ValueError, match="retrain_steps"):
-        build_guided_spatial_world(config)
-
-
-def test_guided_spatial_training_requires_evaluated_offspring():
-    config = SimConfig(spatial=SpatialConfig(initial_population=0, cluster_count=0),
-                       spatial_guidance=SpatialGuidanceConfig(enabled=True,
-                                                              training_steps=2, iterations=5))
-    with pytest.raises(ValueError, match="no evaluated offspring"):
-        build_guided_spatial_world(config)
+def test_guided_spatial_loading_is_reproducible(pretrained_spatial):
+    config, _, _ = pretrained_spatial
+    first, second = build_guided_spatial_world(config), build_guided_spatial_world(config)
+    first.run(5)
+    second.run(5)
+    assert first.history == second.history
 
 
 def test_guided_spatial_loading_reports_missing_file(tmp_path):
     config = SimConfig(spatial_guidance=SpatialGuidanceConfig(
         enabled=True, advisor_path=str(tmp_path / "missing.cbm")))
     with pytest.raises(FileNotFoundError, match="Model file does not exist"):
+        build_guided_spatial_world(config)
+
+
+def test_guided_spatial_requires_an_advisor_path():
+    config = SimConfig(spatial_guidance=SpatialGuidanceConfig(enabled=True, advisor_path=""))
+    with pytest.raises(ValueError, match="advisor_path"):
         build_guided_spatial_world(config)

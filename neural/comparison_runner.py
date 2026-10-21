@@ -1,11 +1,9 @@
 import pandas as pd
 
-from config.sim_config import ComparisonConfig
+from config.sim_config import ComparisonConfig, validate_sim_config
 from core.model import Model
-from neural.advisor import CatBoostAdvisor
+from neural.advisor_training import load_pretrained_advisor
 from neural.guided_mutation import GuidedMutation
-from neural.trainer import train_advisor
-from neural.training_buffer import TrainingBuffer
 from vis.history import is_extinct
 
 
@@ -14,11 +12,11 @@ class ComparisonRunner:
 
     def __init__(self, config: ComparisonConfig | None = None):
         self.config = config or ComparisonConfig()
-        self.baseline_buffer = TrainingBuffer(self.config.simulation.environment)
-        self.baseline = Model(self.config.simulation, recorder=self.baseline_buffer)
-
-        advisor = CatBoostAdvisor(iterations=600, verbose=False)
-        train_advisor(self._train(), advisor)
+        validate_sim_config(self.config.simulation)
+        if self.config.simulation.mode != "classic":
+            raise ValueError("comparison requires simulation.mode=classic")
+        advisor = load_pretrained_advisor(self.config.advisor_path, self.config.simulation)
+        self.baseline = Model(self.config.simulation)
 
         neural_strategy = GuidedMutation(
             advisor=advisor,
@@ -26,20 +24,11 @@ class ComparisonRunner:
         )
         self.neural_branch = Model(self.config.simulation, mutation_strategy=neural_strategy)
 
-    def _train(self) -> TrainingBuffer:
-        training_buffer = TrainingBuffer(self.config.simulation.environment)
-        training_model = Model(self.config.simulation, recorder=training_buffer)
-        training_model.run(self.config.simulation.n_steps)
-        return training_buffer
-
     def step(self) -> None:
         if not is_extinct(self.baseline):
             self.baseline.step()
 
         if not is_extinct(self.neural_branch):
-            if self.neural_branch.step_count != 0 and self.neural_branch.step_count % self.config.retrain_steps == 0:
-                self.neural_branch.mutation_strategy.retrain(self.baseline_buffer)
-
             self.neural_branch.step()
 
     def run(self, n_steps: int) -> None:

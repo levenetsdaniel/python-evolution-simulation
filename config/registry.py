@@ -1,7 +1,8 @@
 from hydra.core.config_store import ConfigStore
 
 from .scenarios import SCENARIOS
-from .sim_config import ComparisonConfig, FitnessConfig, IndividualConfig, PopulationConfig, ProfilerConfig, SimConfig
+from .sim_config import (AdvisorTrainingConfig, ComparisonConfig, FitnessConfig, IndividualConfig,
+                         PopulationConfig, ProfilerConfig, SimConfig)
 
 
 def register_configs() -> None:
@@ -10,6 +11,7 @@ def register_configs() -> None:
 
     cs.store(name="sim_schema", node=SimConfig)
     cs.store(name="compare_schema", node=ComparisonConfig)
+    cs.store(name="advisor_schema", node=AdvisorTrainingConfig)
     cs.store(name="profiler_schema", node=ProfilerConfig)
     cs.store(group="population", name="schema", node=PopulationConfig)
     cs.store(group="individual", name="schema", node=IndividualConfig)

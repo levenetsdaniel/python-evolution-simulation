@@ -1,0 +1,20 @@
+defaults:
+  - advisor_schema
+  - environment@simulation.environment: default
+  - population@simulation.population: schema
+  - individual@simulation.individual: schema
+  - fitness@simulation.fitness: schema
+  - _self_
+
+training_runs: 1
+iterations: 100
+save_path: artifacts/models/${simulation.mode}_advisor.cbm
+
+hydra:
+  run:
+    dir: artifacts/hydra/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: artifacts/hydra/multirun/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

@@ -97,6 +97,8 @@ class SpatialConfig:
     speed_trait_scale: float = 1.5
     base_perception: float = 25.0
     perception_trait_scale: float = 12.0
+    local_map_size: int = 64
+    local_map_span: float = 96.0
     exploration_turn: float = 0.5
     reproduction_energy: float = 90.0
     offspring_energy: float = 30.0
@@ -112,12 +114,25 @@ class SpatialGuidanceConfig:
     """Optional CatBoost guidance for spatial offspring mutations."""
 
     enabled: bool = False
-    training_steps: int = 100
-    retrain_steps: int = 50
-    iterations: int = 100
     shift_strength: float = 0.7
-    advisor_path: str = ""
-    save_path: str = ""
+    advisor_path: str = "artifacts/models/spatial_advisor.cbm"
+
+
+@dataclass
+class SpatialCNNConfig:
+    """Optional shared movement policy trained by imitating the heuristic."""
+
+    enabled: bool = False
+    training_steps: int = 80
+    training_runs: int = 2
+    validation_steps: int = 20
+    max_samples: int = 4096
+    epochs: int = 15
+    batch_size: int = 64
+    learning_rate: float = 0.001
+    threads: int = 1
+    model_path: str = ""
+    save_path: str = "artifacts/models/spatial_policy.pt"
 
 
 @dataclass
@@ -130,6 +145,7 @@ class SimConfig:
     fitness: FitnessConfig = field(default_factory=FitnessConfig)
     spatial: SpatialConfig = field(default_factory=SpatialConfig)
     spatial_guidance: SpatialGuidanceConfig = field(default_factory=SpatialGuidanceConfig)
+    spatial_cnn: SpatialCNNConfig = field(default_factory=SpatialCNNConfig)
     mode: str = "spatial"
     spatial_csv: str = ""
     spatial_html: str = "artifacts/plots/spatial/world.html"
@@ -149,12 +165,22 @@ class SimConfig:
 class ComparisonConfig:
     """Configuration for the ML-guided comparison pipeline."""
 
-    simulation: SimConfig = field(default_factory=SimConfig)
-    retrain_steps: int = 50
+    simulation: SimConfig = field(default_factory=lambda: SimConfig(mode="classic"))
+    advisor_path: str = "artifacts/models/classic_advisor.cbm"
     shift_strength: float = 0.7
     x_trait: str = "heat_resistance"
     y_trait: str = "cold_resistance"
     view: bool = False
+
+
+@dataclass
+class AdvisorTrainingConfig:
+    """Offline CatBoost training on independent baseline simulation runs."""
+
+    simulation: SimConfig = field(default_factory=lambda: SimConfig(n_steps=100))
+    training_runs: int = 1
+    iterations: int = 100
+    save_path: str = ""  # Defaults to artifacts/models/<simulation.mode>_advisor.cbm.
 
 
 @dataclass
@@ -267,12 +293,24 @@ def validate_sim_config(config: SimConfig) -> None:
     _require(config.n_steps >= 0, "n_steps must be non-negative")
     _require(config.steps_info >= 0, "steps_info must be non-negative")
     _require(config.mode in ("classic", "spatial"), "mode must be classic or spatial")
+    _require(not config.spatial_cnn.enabled or config.mode == "spatial",
+             "spatial_cnn requires mode=spatial")
+    for name in ("training_steps", "training_runs", "validation_steps", "max_samples",
+                 "epochs", "batch_size", "threads"):
+        value = getattr(config.spatial_cnn, name)
+        _require(isinstance(value, int) and not isinstance(value, bool) and value >= 1,
+                 f"spatial_cnn.{name} must be a positive integer")
+    _require(config.spatial_cnn.learning_rate > 0, "spatial_cnn.learning_rate must be positive")
+    if config.spatial_cnn.enabled:
+        _require(config.spatial.local_map_size >= 8, "spatial_cnn requires local_map_size >= 8")
+        _require(config.spatial.local_map_span / 2 >= (config.spatial.base_perception
+                 + config.spatial.perception_trait_scale),
+                 "spatial_cnn local map must cover the maximum perception radius")
     _require(not config.spatial_guidance.enabled or config.mode == "spatial",
              "spatial_guidance requires mode=spatial")
+    _require(not config.spatial_guidance.enabled or bool(config.spatial_guidance.advisor_path.strip()),
+             "spatial_guidance.advisor_path is required")
     _require(config.spatial_view_interval >= 1, "spatial_view_interval must be positive")
-    _require(config.spatial_guidance.training_steps >= 1, "spatial_guidance.training_steps must be positive")
-    _require(config.spatial_guidance.retrain_steps >= 1, "spatial_guidance.retrain_steps must be positive")
-    _require(config.spatial_guidance.iterations >= 1, "spatial_guidance.iterations must be positive")
     _require(0 <= config.spatial_guidance.shift_strength <= 1,
              "spatial_guidance.shift_strength must be in [0, 1]")
     validate_spatial_config(config.spatial)
@@ -282,7 +320,7 @@ def validate_sim_config(config: SimConfig) -> None:
 
 
 def _numeric_fields(config: SimConfig):
-    for group_name in ("environment", "population", "individual", "fitness", "spatial", "spatial_guidance"):
+    for group_name in ("environment", "population", "individual", "fitness", "spatial", "spatial_guidance", "spatial_cnn"):
         group = getattr(config, group_name)
         for name, value in vars(group).items():
             if isinstance(value, (int, float)):
@@ -305,6 +343,9 @@ def validate_spatial_config(config: SpatialConfig) -> None:
             _require(value >= 0, f"spatial.{item.name} must be non-negative")
     for name in ("width", "height", "max_population", "max_energy", "food_capacity"):
         _require(getattr(config, name) > 0, f"spatial.{name} must be positive")
+    _require(isinstance(config.local_map_size, int) and not isinstance(config.local_map_size, bool)
+             and config.local_map_size > 0, "spatial.local_map_size must be a positive integer")
+    _require(config.local_map_span > 0, "spatial.local_map_span must be positive")
     _require(config.initial_population <= config.max_population, "spatial.initial_population exceeds max_population")
     _require(config.initial_energy <= config.max_energy, "spatial.initial_energy exceeds max_energy")
     _require(config.food_initial <= config.food_capacity, "spatial.food_initial exceeds food_capacity")

@@ -6,7 +6,7 @@ defaults:
   - fitness@simulation.fitness: schema
   - _self_
 
-retrain_steps: 50
+advisor_path: artifacts/models/classic_advisor.cbm
 shift_strength: 0.7
 x_trait: heat_resistance
 y_trait: cold_resistance

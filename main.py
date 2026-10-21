@@ -25,6 +25,18 @@ def main(cfg: SimConfig) -> None:
             world = build_guided_spatial_world(cfg)
         else:
             world = SpatialWorld.from_sim_config(cfg)
+        if cfg.spatial_cnn.enabled:
+            try:
+                from neural.cnn_training import build_cnn_policy
+            except ModuleNotFoundError as error:
+                if error.name == "torch":
+                    raise RuntimeError("CNN requires PyTorch: python3 -m pip install -r requirements.txt") from error
+                raise
+            world.policy = build_cnn_policy(cfg)
+            report = world.policy.training_report
+            if report:
+                print(f"CNN validation MSE: {report['validation_mse']:.6f}; "
+                      f"best epoch: {report['best_epoch']}")
         if cfg.view:
             snapshots = collect_spatial_snapshots(world, cfg.n_steps, cfg.spatial_view_interval)
             path = save_spatial_figure(build_spatial_figure(world, snapshots), cfg.spatial_html)
@@ -33,8 +45,6 @@ def main(cfg: SimConfig) -> None:
             world.run(cfg.n_steps)
         if cfg.spatial_csv:
             world.export_csv(cfg.spatial_csv)
-        if cfg.spatial_guidance.enabled:
-            print(f"Advisor retrained at steps: {world.retraining_steps}")
         print(world.history[-1])
         return
 

@@ -1,6 +1,8 @@
 """Smoke tests for entrypoints and architecture boundaries."""
 
 from pathlib import Path
+import subprocess
+import sys
 
 import pandas as pd
 import pytest
@@ -32,6 +34,13 @@ def test_spatial_is_default_and_classic_remains_explicit():
     assert SimConfig(mode="classic").mode == "classic"
 
 
+def test_default_entrypoint_does_not_import_pytorch():
+    result = subprocess.run([sys.executable, "-c", "import sys; import main; print('torch' in sys.modules)"],
+                            cwd=Path(__file__).resolve().parents[1], check=True,
+                            capture_output=True, text=True)
+    assert result.stdout.strip() == "False"
+
+
 def test_main_guided_spatial_selects_guidance_builder(monkeypatch):
     import neural.spatial_guidance as spatial_guidance
 
@@ -39,7 +48,6 @@ def test_main_guided_spatial_selects_guidance_builder(monkeypatch):
 
     class StubWorld:
         history = [{"TimeStep": 0}]
-        retraining_steps = []
 
         def run(self, steps):
             calls["steps"] = steps

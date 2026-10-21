@@ -41,10 +41,10 @@ def test_sim_config_contains_all_runtime_subconfigs():
 
 def test_sim_config_allows_spatial_guidance_overrides():
     cfg = _compose("sim_config", ["spatial_guidance.enabled=true",
-                                  "spatial_guidance.training_steps=25",
+                                  "spatial_guidance.advisor_path=artifacts/models/test.cbm",
                                   "spatial_guidance.shift_strength=0.4"])
     assert cfg.spatial_guidance.enabled
-    assert cfg.spatial_guidance.training_steps == 25
+    assert cfg.spatial_guidance.advisor_path == "artifacts/models/test.cbm"
     assert cfg.spatial_guidance.shift_strength == 0.4
 
 
@@ -54,6 +54,14 @@ def test_sim_config_allows_environment_group_override():
     assert cfg.environment.temp_start == -15.0
     assert cfg.environment.temp_step == 0.1
     assert cfg.environment.food_regeneration_rate == 0.85
+
+
+def test_sim_config_allows_cnn_and_local_map_overrides():
+    cfg = _compose("sim_config", ["spatial_cnn.enabled=true", "spatial_cnn.epochs=3",
+                                  "spatial.local_map_size=32", "spatial.local_map_span=100"])
+    assert cfg.spatial_cnn.enabled and cfg.spatial_cnn.epochs == 3
+    assert cfg.spatial.local_map_size == 32 and cfg.spatial.local_map_span == 100
+    validate_sim_config(cfg)
 
 
 def test_sim_config_allows_nested_individual_and_fitness_overrides():
@@ -103,8 +111,17 @@ def test_compare_config_contains_separate_simulation_and_ml_settings():
 
     assert cfg.simulation.n_steps == 600
     assert cfg.simulation.population.initial_size == 100
-    assert cfg.retrain_steps == 50
+    assert cfg.simulation.mode == "classic"
+    assert cfg.advisor_path == "artifacts/models/classic_advisor.cbm"
     assert cfg.shift_strength == 0.7
+
+
+@pytest.mark.parametrize("mode", ["spatial", "classic"])
+def test_advisor_training_config_uses_a_separate_model_for_each_mode(mode):
+    cfg = _compose("advisor_config", [f"simulation.mode={mode}"])
+    assert cfg.simulation.mode == mode
+    assert cfg.save_path == f"artifacts/models/{mode}_advisor.cbm"
+    assert cfg.simulation.n_steps == 100
 
 
 def test_compare_config_allows_nested_simulation_and_comparison_overrides():
@@ -113,14 +130,14 @@ def test_compare_config_allows_nested_simulation_and_comparison_overrides():
         [
             "environment@simulation.environment=warming",
             "simulation.population.initial_size=220",
-            "retrain_steps=25",
+            "advisor_path=artifacts/models/test.cbm",
             "x_trait=size",
         ],
     )
 
     assert cfg.simulation.environment.temp_start == -15.0
     assert cfg.simulation.population.initial_size == 220
-    assert cfg.retrain_steps == 25
+    assert cfg.advisor_path == "artifacts/models/test.cbm"
     assert cfg.x_trait == "size"
 
 
@@ -148,7 +165,7 @@ def test_resource_stress_scenarios_use_limited_regeneration():
         SimConfig(individual=IndividualConfig(energy_capacity=0.0)),
         SimConfig(individual=IndividualConfig(energy_initial=101.0)),
         SimConfig(n_steps=-1),
-        SimConfig(spatial_guidance=SpatialGuidanceConfig(enabled=True, training_steps=0)),
+        SimConfig(spatial_guidance=SpatialGuidanceConfig(enabled=True, advisor_path="")),
         SimConfig(spatial_guidance=SpatialGuidanceConfig(enabled=True, shift_strength=1.1)),
         SimConfig(mode="classic", spatial_guidance=SpatialGuidanceConfig(enabled=True)),
     ],

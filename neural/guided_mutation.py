@@ -6,8 +6,6 @@ from core.individual import Individual
 from core.mutation_patterns import MutationStrategy
 from neural.advisor import CatBoostAdvisor
 from neural.mutation import neural_mutate
-from neural.trainer import train_advisor
-from neural.training_buffer import TrainingBuffer
 
 
 class GuidedMutation(MutationStrategy):
@@ -59,6 +57,3 @@ class GuidedMutation(MutationStrategy):
             rng=model.rng,
             mutation_std=mutation_std,
         )
-
-    def retrain(self, training_buffer: TrainingBuffer, *, continue_training: bool = False) -> None:
-        train_advisor(training_buffer, self._advisor, continue_training=continue_training)

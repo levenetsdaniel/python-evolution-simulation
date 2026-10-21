@@ -28,3 +28,8 @@ class SpatialIndividual(Individual):
                  parent_ids: tuple[int, int] | None = None, birth_step: int = 0):
         super().__init__(model, genome, list(genome_labels), parent_ids, birth_step)
         self.state = state
+
+    @property
+    def local_map(self) -> np.ndarray:
+        """Build a current observation; maps are state snapshots, not inherited traits."""
+        return self.model.observation_provider.local_map(self.model, self)

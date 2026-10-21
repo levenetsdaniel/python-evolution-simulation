@@ -162,13 +162,20 @@ class SpatialWorld(mesa.Model):
             unknown = set(supplied) - organisms.keys()
             if unknown:
                 raise ValueError(f"unknown organism IDs: {sorted(unknown)}")
-        result = {}
-        for organism_id in sorted(organisms):
-            organism = organisms[organism_id]
-            result[organism_id] = (supplied[organism_id] if supplied is not None and organism_id in supplied
-                                   else self.policy.choose(self.observation_provider.observe(self, organism),
-                                                           self.rng, self.config.exploration_turn))
-            action = result[organism_id]
+        result = dict(supplied) if supplied is not None else {}
+        pending = [key for key in sorted(organisms) if key not in result]
+        observations = [self.observation_provider.observe(self, organisms[key]) for key in pending]
+        if pending:
+            choose_batch = getattr(self.policy, "choose_batch", None)
+            if choose_batch is not None:
+                actions = choose_batch(observations, self.rng, self.config.exploration_turn)
+            else:
+                actions = [self.policy.choose(observation, self.rng, self.config.exploration_turn)
+                           for observation in observations]
+            if len(actions) != len(pending):
+                raise ValueError("policy must return one action per observation")
+            result.update(zip(pending, actions))
+        for action in result.values():
             if not np.isfinite((action.dx, action.dy)).all():
                 raise ValueError("action direction must be finite")
         return result

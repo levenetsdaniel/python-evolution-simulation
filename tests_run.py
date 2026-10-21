@@ -24,7 +24,13 @@ TEST_FILES = [
     "tests/training_buffer_tests.py",
     "tests/advisor_tests.py",
     "tests/trainer_tests.py",
-    "tests/mutation_tests.py"
+    "tests/mutation_tests.py",
+    "tests/spatial_tests.py",
+    "tests/spatial_visualization_tests.py",
+    "tests/spatial_guidance_tests.py",
+    "tests/spatial_observation_tests.py",
+    "tests/cnn_policy_tests.py",
+    "tests/advisor_training_tests.py",
 ]
 
 
