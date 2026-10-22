@@ -31,13 +31,15 @@ def test_local_map_channels_shape_range_and_observation():
     agent = add_agent(world)
     before = deepcopy(world.rng.bit_generator.state)
     observation = world.observation_provider.observe(world, agent)
-    assert LOCAL_MAP_CHANNELS == ("food", "organisms", "boundary", "visibility")
-    assert observation.local_map.shape == (4, 8, 8)
+    assert LOCAL_MAP_CHANNELS == ("food", "organisms", "boundary", "visibility", "mates")
+    assert observation.local_map.shape == (5, 8, 8)
     assert observation.local_map.dtype == np.float32
     assert np.all((observation.local_map >= 0) & (observation.local_map <= 1))
     assert not observation.local_map[1].any()  # The observer is excluded.
     assert world.rng.bit_generator.state == before
     np.testing.assert_array_equal(agent.local_map, observation.local_map)
+    assert observation.nearby_map.shape == observation.local_map.shape
+    assert not observation.nearby_map.flags.writeable
 
 
 def test_local_map_places_visible_objects_and_aggregates_food():
@@ -117,7 +119,37 @@ def test_local_map_is_a_detached_snapshot_and_updates_after_movement():
 
 
 @pytest.mark.parametrize("field,value", [("local_map_size", 0), ("local_map_size", 2.5),
-                                          ("local_map_span", 0), ("local_map_span", float("nan"))])
+                                          ("local_map_span", 0), ("local_map_span", float("nan")),
+                                          ("nearby_map_span", 0), ("nearby_map_span", float("nan"))])
 def test_invalid_local_map_config_is_rejected(field, value):
     with pytest.raises(ValueError, match=field):
         SpatialWorld(SpatialConfig(**{field: value}))
+
+
+def test_nearby_map_resolves_partner_positions_merged_by_the_local_map():
+    from core.enums import Gender
+
+    world = world_with_map(local_map_size=64, local_map_span=96, reproduction_rate=1)
+    agent = add_agent(world)
+    agent.gender, agent.age, agent.energy = Gender.FEMALE, 3, 150
+    mate = add_agent(world, 53, 50)
+    mate.gender, mate.age = Gender.MALE, 3
+    inside = world.observation_provider.observe(world, agent)
+    mate.state.x = 53.375
+    world.space.move_agent(mate, (53.375, 50))
+    outside = world.observation_provider.observe(world, agent)
+    np.testing.assert_array_equal(inside.local_map, outside.local_map)
+    assert not np.array_equal(inside.nearby_map, outside.nearby_map)
+    assert inside.nearest_mate.distance <= world.mating_distance < outside.nearest_mate.distance
+
+
+def test_nearby_map_respects_visibility_boundaries_and_physical_window():
+    world = world_with_map(local_map_size=64, local_map_span=96, base_perception=4)
+    agent = add_agent(world, 1, 1)
+    add_agent(world, 3, 1)
+    add_agent(world, 6, 1)  # Inside the window but outside inherited perception.
+    add_agent(world, 10, 1)  # Outside the nearby window.
+    nearby = world.observation_provider.observe(world, agent).nearby_map
+    assert np.count_nonzero(nearby[1]) == 1
+    assert nearby[2].any()
+    assert np.all(nearby[:, nearby[3] == 0] == 0)

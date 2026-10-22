@@ -468,6 +468,13 @@ class SpatialPopulation(Population):
         super().__init__(model, baseline_config)
         self.spatial_config = config
 
+    def can_reproduce(self, agent: Individual) -> bool:
+        """Shared readiness signal for observations and actual parent selection."""
+        cfg = self.spatial_config
+        energy = cfg.reproduction_energy if agent.gender == Gender.FEMALE else 0
+        return (len(self.model.agents) < cfg.max_population and cfg.reproduction_rate > 0
+                and agent.energy > 0 and agent.can_reproduce(cfg.min_reproduction_age, energy))
+
     def remove_dead(self) -> dict[str, int]:
         organisms = self.model.organisms
         for agent in organisms.values():
@@ -505,13 +512,12 @@ class SpatialPopulation(Population):
         for mother in parents:
             if len(self.model.agents) >= cfg.max_population:
                 break
-            if mother.gender != Gender.FEMALE or not mother.can_reproduce(
-                    cfg.min_reproduction_age, cfg.reproduction_energy):
+            if mother.gender != Gender.FEMALE or not self.can_reproduce(mother):
                 continue
-            mates = sorted((father for father in self.model.space.get_neighbors(mother.pos, cfg.mating_radius)
+            mates = sorted((father for father in self.model.space.get_neighbors(mother.pos, self.model.mating_distance)
                             if father.unique_id in parent_ids and father is not mother
                             and father.gender == Gender.MALE
-                            and father.can_reproduce(cfg.min_reproduction_age, 0)),
+                            and self.can_reproduce(father)),
                            key=lambda agent: agent.unique_id)
             if not mates or self.model.rng.random() >= mother.reproduction_probability(cfg.reproduction_rate):
                 continue

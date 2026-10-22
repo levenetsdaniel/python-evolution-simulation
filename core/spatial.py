@@ -150,6 +150,11 @@ class SpatialWorld(mesa.Model):
     def perception(self, organism: SpatialIndividual) -> float:
         return self.config.base_perception + self.config.perception_trait_scale * organism["resilience"]
 
+    @property
+    def mating_distance(self) -> float:
+        """Convert the configured mating radius from map cells to world units."""
+        return self.config.mating_radius * self.config.local_map_span / self.config.local_map_size
+
     def nearest_food(self, x: float, y: float, radius: float) -> FoodSource | None:
         return self.environment.nearest_food(x, y, radius)
 
@@ -217,6 +222,8 @@ class SpatialWorld(mesa.Model):
         for key in self.attacks_this_step:
             self.attacks_this_step[key] = 0
         self.environment.step()
+        for organism in self.organisms.values():
+            organism.state.foraging = organism.foraging
         chosen = self._actions(self._pending_actions)
         organisms = self.organisms
         for organism_id in sorted(organisms):

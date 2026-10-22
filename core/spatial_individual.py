@@ -18,6 +18,7 @@ class SpatialState:
     x: float
     y: float
     heading: float
+    foraging: bool = False
 
 
 class SpatialIndividual(Individual):
@@ -33,3 +34,12 @@ class SpatialIndividual(Individual):
     def local_map(self) -> np.ndarray:
         """Build a current observation; maps are state snapshots, not inherited traits."""
         return self.model.observation_provider.local_map(self.model, self)
+
+    @property
+    def foraging(self) -> bool:
+        """Hunger hysteresis; reading observations never mutates behavior memory."""
+        if self.satiation <= self.model.config.foraging_threshold:
+            return True
+        if self.satiation >= self.model.config.satiation_threshold:
+            return False
+        return self.state.foraging

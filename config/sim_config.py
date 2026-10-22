@@ -99,12 +99,15 @@ class SpatialConfig:
     perception_trait_scale: float = 12.0
     local_map_size: int = 64
     local_map_span: float = 96.0
+    nearby_map_span: float = 12.0
     exploration_turn: float = 0.5
+    foraging_threshold: float = 0.6
+    satiation_threshold: float = 0.85
     reproduction_energy: float = 90.0
     offspring_energy: float = 30.0
     reproduction_rate: float = 1.0
     min_reproduction_age: int = 2
-    mating_radius: float = 25.0
+    mating_radius: float = 2.0  # Local-map cells; converted to world distance.
     offspring_offset: float = 2.0
     mutation_std: float = 0.12
 
@@ -120,19 +123,20 @@ class SpatialGuidanceConfig:
 
 @dataclass
 class SpatialCNNConfig:
-    """Optional shared movement policy trained by imitating the heuristic."""
+    """Optional visual target selection trained by imitating the heuristic."""
 
     enabled: bool = False
     training_steps: int = 80
     training_runs: int = 2
     validation_steps: int = 20
     max_samples: int = 4096
-    epochs: int = 15
+    epochs: int = 25
     batch_size: int = 64
-    learning_rate: float = 0.001
+    learning_rate: float = 0.0003
+    target_loss_weight: float = 1.0
     threads: int = 1
     model_path: str = ""
-    save_path: str = "artifacts/models/spatial_policy.pt"
+    save_path: str = "artifacts/models/spatial_target_policy.pt"
 
 
 @dataclass
@@ -301,6 +305,8 @@ def validate_sim_config(config: SimConfig) -> None:
         _require(isinstance(value, int) and not isinstance(value, bool) and value >= 1,
                  f"spatial_cnn.{name} must be a positive integer")
     _require(config.spatial_cnn.learning_rate > 0, "spatial_cnn.learning_rate must be positive")
+    _require(config.spatial_cnn.target_loss_weight > 0,
+             "spatial_cnn.target_loss_weight must be positive")
     if config.spatial_cnn.enabled:
         _require(config.spatial.local_map_size >= 8, "spatial_cnn requires local_map_size >= 8")
         _require(config.spatial.local_map_span / 2 >= (config.spatial.base_perception
@@ -346,6 +352,8 @@ def validate_spatial_config(config: SpatialConfig) -> None:
     _require(isinstance(config.local_map_size, int) and not isinstance(config.local_map_size, bool)
              and config.local_map_size > 0, "spatial.local_map_size must be a positive integer")
     _require(config.local_map_span > 0, "spatial.local_map_span must be positive")
+    _require(0 < config.nearby_map_span <= config.local_map_span,
+             "spatial.nearby_map_span must be positive and no larger than local_map_span")
     _require(config.initial_population <= config.max_population, "spatial.initial_population exceeds max_population")
     _require(config.initial_energy <= config.max_energy, "spatial.initial_energy exceeds max_energy")
     _require(config.food_initial <= config.food_capacity, "spatial.food_initial exceeds food_capacity")
@@ -357,3 +365,5 @@ def validate_spatial_config(config: SpatialConfig) -> None:
              "spatial.food_disappearance_probability must be in [0, 1]")
     _require(config.food_spawn_probability <= 1,
              "spatial.food_spawn_probability must be in [0, 1]")
+    _require(0 <= config.foraging_threshold < config.satiation_threshold <= 1,
+             "spatial energy thresholds must satisfy 0 <= foraging_threshold < satiation_threshold <= 1")

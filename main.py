@@ -35,7 +35,9 @@ def main(cfg: SimConfig) -> None:
             world.policy = build_cnn_policy(cfg)
             report = world.policy.training_report
             if report:
-                print(f"CNN validation MSE: {report['validation_mse']:.6f}; "
+                print(f"CNN validation loss: {report['validation_loss']:.6f}; "
+                      f"goal accuracy: {report['goal_accuracy']:.1%}; "
+                      f"target accuracy: {report['target_accuracy']:.1%}; "
                       f"best epoch: {report['best_epoch']}")
         if cfg.view:
             snapshots = collect_spatial_snapshots(world, cfg.n_steps, cfg.spatial_view_interval)
