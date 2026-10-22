@@ -12,7 +12,7 @@ from core.spatial import SpatialWorld
 @dataclass(frozen=True)
 class SpatialSnapshot:
     step: int
-    organisms: tuple[tuple[int, float, float, float, int, float | None], ...]
+    organisms: tuple[tuple[int, float, float, float, int, float | None, float], ...]
     food: tuple[tuple[float, float, float, float], ...]
 
 
@@ -21,7 +21,7 @@ def capture_spatial_snapshot(world: SpatialWorld) -> SpatialSnapshot:
     return SpatialSnapshot(
         step=world.step_count,
         organisms=tuple((organism.unique_id, organism.state.x, organism.state.y,
-                         organism.energy, organism.age, organism.fitness)
+                         organism.energy, organism.age, organism.fitness, world.perception(organism))
                         for _, organism in sorted(world.organisms.items())),
         food=tuple((source.x, source.y, source.stock, source.capacity)
                    for source in world.food_sources),
@@ -68,8 +68,8 @@ def _organism_trace(snapshot: SpatialSnapshot, max_energy: float) -> go.Scatter:
                 "colorscale": "Turbo", "cmin": 0, "cmax": max_energy,
                 "colorbar": {"title": "Энергия"},
                 "line": {"color": "#182b46", "width": 0.4}},
-        customdata=[[item[0], item[3], item[4], item[5]] for item in snapshot.organisms],
-        hovertemplate="ID %{customdata[0]}<br>Энергия %{customdata[1]:.1f}<br>Возраст %{customdata[2]}<br>Fitness %{customdata[3]:.3f}<br>x=%{x:.1f}, y=%{y:.1f}<extra></extra>",
+        customdata=[[item[0], item[3], item[4], item[5], item[6]] for item in snapshot.organisms],
+        hovertemplate="ID %{customdata[0]}<br>Энергия %{customdata[1]:.1f}<br>Возраст %{customdata[2]}<br>Fitness %{customdata[3]:.3f}<br>Радиус зрения %{customdata[4]:.1f}<br>x=%{x:.1f}, y=%{y:.1f}<extra></extra>",
     )
 
 
@@ -86,7 +86,7 @@ def _history_traces(world: SpatialWorld, step: int) -> tuple[go.Scatter, go.Scat
 
 
 def build_spatial_figure(world: SpatialWorld, snapshots: list[SpatialSnapshot]) -> go.Figure:
-    """Build a step slider and play controls over fixed world coordinates."""
+    """Build world frames; the HTML exporter adds playback and hover controls."""
     if not snapshots:
         raise ValueError("at least one spatial snapshot is required")
     fig = make_subplots(rows=2, cols=1, row_heights=[0.72, 0.28], vertical_spacing=0.1,
@@ -123,22 +123,7 @@ def build_spatial_figure(world: SpatialWorld, snapshots: list[SpatialSnapshot]) 
         template="plotly_white",
         height=850,
         legend={"orientation": "h", "y": 1.02},
-        margin={"l": 65, "r": 85, "t": 90, "b": 110},
-        updatemenus=[{"type": "buttons", "showactive": False, "x": 0, "y": -0.09,
-                      "buttons": [
-                          {"label": "▶ Играть", "method": "animate",
-                           "args": [None, {"frame": {"duration": 120, "redraw": True},
-                                           "transition": {"duration": 0}, "fromcurrent": True}]},
-                          {"label": "⏸ Пауза", "method": "animate",
-                           "args": [[None], {"frame": {"duration": 0, "redraw": False},
-                                             "mode": "immediate"}]},
-                      ]}],
-        sliders=[{"active": 0, "x": 0.2, "y": -0.07, "len": 0.78,
-                  "currentvalue": {"prefix": "Шаг: "},
-                  "steps": [{"label": frame.name, "method": "animate",
-                             "args": [[frame.name], {"frame": {"duration": 0, "redraw": True},
-                                                     "mode": "immediate"}]}
-                            for frame in frames]}],
+        margin={"l": 65, "r": 85, "t": 90, "b": 55},
     )
     return fig
 
@@ -147,5 +132,7 @@ def save_spatial_figure(figure: go.Figure, path: str | Path) -> Path:
     """Write a self-contained HTML file that opens without a Python server."""
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
-    figure.write_html(str(output), include_plotlyjs=True, full_html=True)
+    script = Path(__file__).with_name("spatial.js").read_text(encoding="utf-8")
+    figure.write_html(str(output), include_plotlyjs=True, full_html=True,
+                      post_script=script, auto_play=False)
     return output

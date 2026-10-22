@@ -16,6 +16,24 @@ from core.spatial_policy import HeuristicPolicy
 from .cnn_policy import CNNPolicy, GOAL_NAMES, IGNORE_TARGET, TargetCNN, encode_observation
 
 
+def select_training_device(requested: str = "auto") -> torch.device:
+    """Prefer CUDA, then Apple MPS; explicit requests never silently fall back."""
+    if requested == "auto":
+        requested = ("cuda" if torch.cuda.is_available() else
+                     "mps" if torch.backends.mps.is_available() else "cpu")
+    device = torch.device(requested)
+    if device.type == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("Requested CNN training device CUDA is unavailable")
+        if device.index is not None and device.index >= torch.cuda.device_count():
+            raise RuntimeError(f"Requested CNN training device {device} is unavailable")
+    elif device.type == "mps" and not torch.backends.mps.is_available():
+        raise RuntimeError("Requested CNN training device MPS is unavailable")
+    elif device.type not in ("cpu", "cuda", "mps"):
+        raise ValueError(f"Unsupported CNN training device: {device}")
+    return device
+
+
 def encode_target(observation, map_span: float, nearby_map_span: float) -> tuple[int, int]:
     """Teacher coordinates are labels only; prefer the detailed map when visible."""
     goal = HeuristicPolicy.goal(observation)
@@ -93,7 +111,9 @@ def rotate_examples(pixels: torch.Tensor, state: torch.Tensor, targets: torch.Te
     size = pixels.shape[-1]
     for turn in (1, 2, 3):
         mask = turns == turn
-        pixels[mask] = torch.rot90(pixels[mask], turn, dims=(-2, -1))
+        # Rows increase along world +y. Positive world rotation therefore
+        # rotates the tensor clockwise, opposite to torch.rot90's convention.
+        pixels[mask] = torch.rot90(pixels[mask], -turn, dims=(-2, -1))
         valid = mask & (targets != IGNORE_TARGET)
         scale = targets[valid] // (size * size)
         rows, columns = (targets[valid] % (size * size)) // size, targets[valid] % size
@@ -112,11 +132,16 @@ def target_scores(logits: torch.Tensor, goals: torch.Tensor) -> torch.Tensor:
 
 
 def target_loss(network: TargetCNN, data, class_weights, target_weight: float):
-    pixels, state, goals, targets = data
+    device = next(network.parameters()).device
+    pixels, state, goals, targets = (item.to(device) for item in data)
+    class_weights = class_weights.to(device)
     goal_logits, target_logits = network(pixels.float() / 255, state)
     goal_loss = nn.functional.cross_entropy(goal_logits, goals, weight=class_weights)
     valid = targets != IGNORE_TARGET
-    cell_loss = (nn.functional.cross_entropy(target_scores(target_logits, goals)[valid], targets[valid])
+    scores = target_scores(target_logits, goals)[valid]
+    if valid.any() and (scores.gather(1, targets[valid, None]) <= -1e8).any():
+        raise ValueError("Target label does not point to an observable candidate cell")
+    cell_loss = (nn.functional.cross_entropy(scores, targets[valid])
                  if valid.any() else target_logits.sum() * 0)
     return goal_loss + target_weight * cell_loss, goal_logits, target_logits
 
@@ -130,7 +155,7 @@ def evaluate_targets(network: TargetCNN, data, batch_size: int, class_weights, t
         for start in range(0, len(data[2]), batch_size):
             batch = tuple(item[start:start + batch_size] for item in data)
             loss, goal_logits, target_logits = target_loss(network, batch, class_weights, target_weight)
-            goals, targets = batch[2:]
+            goals, targets = (item.to(goal_logits.device) for item in batch[2:])
             valid = targets != IGNORE_TARGET
             selected = target_scores(target_logits, goals).argmax(dim=1)
             goal_correct = goal_logits.argmax(dim=1) == goals
@@ -157,6 +182,8 @@ def evaluate_targets(network: TargetCNN, data, batch_size: int, class_weights, t
 
 def train_cnn_policy(config: SimConfig) -> CNNPolicy:
     settings = config.spatial_cnn
+    device = select_training_device(settings.device)
+    print(f"CNN training device: {device}")
     training_seeds = [config.seed + index for index in range(settings.training_runs)]
     validation_seed = config.seed + settings.training_runs
     training = collect_target_samples(config, training_seeds, settings.training_steps, settings.max_samples)
@@ -166,8 +193,11 @@ def train_cnn_policy(config: SimConfig) -> CNNPolicy:
     counts = torch.bincount(train_data[2], minlength=len(GOAL_NAMES)).float()
     class_weights = torch.where(counts > 0, len(train_data[2]) / (len(GOAL_NAMES) * counts.clamp_min(1)), 1)
     with torch.random.fork_rng(devices=[]):
-        torch.manual_seed(config.seed)
-        network = TargetCNN(config.spatial.nearby_map_span / config.spatial.local_map_span)
+        # Initialization, shuffling and augmentation use private/isolated CPU
+        # RNGs. The network has no stochastic accelerator layers.
+        torch.random.default_generator.manual_seed(config.seed)
+        network = TargetCNN(config.spatial.nearby_map_span / config.spatial.local_map_span).to(device)
+        class_weights = class_weights.to(device)
         optimizer = torch.optim.Adam(network.parameters(), lr=settings.learning_rate)
         generator = torch.Generator().manual_seed(config.seed)
         initial = evaluate_targets(network, validation_data, settings.batch_size, class_weights, settings.target_loss_weight)
@@ -203,6 +233,7 @@ def train_cnn_policy(config: SimConfig) -> CNNPolicy:
               "training_goals": training.goal_counts, "validation_goals": validation.goal_counts,
               "learning_rate": settings.learning_rate, "batch_size": settings.batch_size,
               "target_loss_weight": settings.target_loss_weight, "rotation_augmentation": True,
+              "training_device": str(device),
               "best_epoch": best_epoch, "epochs": losses}
     return CNNPolicy(network, config, report)
 

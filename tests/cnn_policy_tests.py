@@ -15,7 +15,8 @@ from core.spatial import SpatialWorld
 from core.spatial_policy import FoodObservation, MateObservation, MoveAction, SpatialTarget, TargetController
 from neural.cnn_policy import CNNPolicy, GOAL_NAMES, IGNORE_TARGET, STATE_SIZE, TargetCNN, encode_observation
 from neural.cnn_training import (TargetBuffer, RecordingHeuristicPolicy, build_cnn_policy,
-                                 collect_target_samples, encode_target, rotate_examples, target_loss, target_scores)
+                                 collect_target_samples, encode_target, rotate_examples, select_training_device,
+                                 target_loss, target_scores)
 
 
 @pytest.fixture(scope="module")
@@ -23,10 +24,53 @@ def trained_policy():
     config = SimConfig(seed=42,
                        spatial=SpatialConfig(initial_population=12, max_population=30,
                                              local_map_size=16, cluster_count=2, sources_per_cluster=3),
-                       spatial_cnn=SpatialCNNConfig(enabled=True, training_steps=6, training_runs=1,
+                       spatial_cnn=SpatialCNNConfig(enabled=True, device="cpu", training_steps=6, training_runs=1,
                                                     validation_steps=4, max_samples=64, epochs=8,
                                                     batch_size=16, save_path=""))
     return config, build_cnn_policy(config)
+
+
+@pytest.mark.parametrize("cuda,mps,expected", [(True, True, "cuda"), (False, True, "mps"),
+                                              (False, False, "cpu")])
+def test_training_device_auto_prefers_available_accelerators(monkeypatch, cuda, mps, expected):
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: cuda)
+    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: mps)
+    assert str(select_training_device()) == expected
+    assert str(select_training_device("cpu")) == "cpu"
+
+
+def test_unavailable_explicit_training_device_is_rejected(monkeypatch):
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
+    for device in ("cuda", "mps"):
+        with pytest.raises(RuntimeError, match="unavailable"):
+            select_training_device(device)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+    assert str(select_training_device("cuda:1")) == "cuda:1"
+    with pytest.raises(RuntimeError, match="unavailable"):
+        select_training_device("cuda:2")
+
+
+@pytest.mark.parametrize("device", ["cuda", "mps"])
+def test_accelerator_training_produces_a_portable_cpu_checkpoint(device, tmp_path):
+    try:
+        select_training_device(device)
+    except RuntimeError:
+        pytest.skip(f"{device} is not available")
+    config = SimConfig(spatial=SpatialConfig(initial_population=12, max_population=30, local_map_size=16,
+                                             cluster_count=2, sources_per_cluster=3),
+                       spatial_cnn=SpatialCNNConfig(enabled=True, device=device, training_steps=4,
+                                                    training_runs=1, validation_steps=2, max_samples=32,
+                                                    epochs=2, batch_size=8, save_path=str(tmp_path / "policy.pt")))
+    policy = build_cnn_policy(config)
+    assert policy.training_report["training_device"] == device
+    assert next(policy.network.parameters()).device.type == "cpu"
+    loaded_config = replace(config, spatial_cnn=replace(config.spatial_cnn, device="cpu",
+                                                       model_path=config.spatial_cnn.save_path))
+    loaded = build_cnn_policy(loaded_config)
+    for name, weights in policy.network.state_dict().items():
+        assert torch.equal(weights, loaded.network.state_dict()[name])
 
 
 def food_observation(distance=2):
@@ -55,6 +99,7 @@ def test_teacher_labels_select_visible_cells_and_prefer_the_detailed_map():
 def test_training_rotations_preserve_target_scale_heading_and_visibility():
     pixels = torch.zeros(4, 10, 8, 8, dtype=torch.uint8)
     pixels[:, 0, 4, 6] = pixels[:, 5, 4, 6] = 255
+    pixels[:, 3] = pixels[:, 8] = 255
     state = torch.zeros(4, STATE_SIZE)
     state[:, 1] = 1
     targets = torch.tensor([4 * 8 + 6, 64 + 4 * 8 + 6, 4 * 8 + 6, IGNORE_TARGET])
@@ -62,9 +107,41 @@ def test_training_rotations_preserve_target_scale_heading_and_visibility():
     torch.testing.assert_close(headings[:, 1:3], torch.tensor([[1., 0], [0, 1], [-1, 0], [0, -1]]))
     assert labels.tolist() == [38, 64 + 6 * 8 + 3, 3 * 8 + 1, IGNORE_TARGET]
     for turn in range(4):
-        torch.testing.assert_close(rotated[turn], torch.rot90(pixels[turn], turn, (-2, -1)))
+        torch.testing.assert_close(rotated[turn], torch.rot90(pixels[turn], -turn, (-2, -1)))
+        if labels[turn] != IGNORE_TARGET:
+            scale, cell = divmod(int(labels[turn]), 64)
+            row, column = divmod(cell, 8)
+            assert rotated[turn, scale * 5, row, column] == 255
+            assert rotated[turn, scale * 5 + 3, row, column] == 255
     assert torch.equal(state[:, 1], torch.ones(4))
     assert targets[1] == 102
+
+
+@pytest.mark.parametrize("kind", ["forage", "mate"])
+@pytest.mark.parametrize("turn", [0, 1, 2, 3])
+def test_rotated_target_remains_a_legal_candidate_on_both_scales(kind, turn):
+    pixels = torch.zeros(2, 10, 8, 8, dtype=torch.uint8)
+    channel = 4 if kind == "mate" else 0
+    pixels[:, 3] = pixels[:, 8] = 255
+    pixels[:, channel, 1, 6] = pixels[:, channel + 5, 1, 6] = 255
+    state = torch.zeros(2, STATE_SIZE)
+    state[:, -2] = 1
+    goals = torch.full((2,), GOAL_NAMES.index(kind))
+    targets = torch.tensor([14, 64 + 14])
+    rotated, state, targets = rotate_examples(pixels, state, targets, torch.full((2,), turn))
+    logits = TargetCNN.candidate_mask(rotated.float() / 255)
+    candidates = logits[torch.arange(2), (goals == GOAL_NAMES.index("mate")).long()].flatten(1)
+    assert candidates.gather(1, targets[:, None]).all()
+
+
+def test_training_rejects_a_label_pointing_to_empty_space():
+    pixels = torch.zeros(1, 10, 8, 8)
+    pixels[:, 3] = 255
+    pixels[:, 0, 1, 6] = 255
+    goals = torch.tensor([GOAL_NAMES.index("forage")])
+    with pytest.raises(ValueError, match="observable candidate"):
+        target_loss(TargetCNN(), (pixels, torch.zeros(1, STATE_SIZE), goals, torch.tensor([0])),
+                    torch.ones(5), 1)
 
 
 def test_training_uses_held_out_worlds_and_bounded_samples(trained_policy):
@@ -73,9 +150,11 @@ def test_training_uses_held_out_worlds_and_bounded_samples(trained_policy):
     assert report["training_seeds"] == [config.seed]
     assert report["validation_seed"] == config.seed + 1
     assert report["training_samples"] <= config.spatial_cnn.max_samples
+    assert report["training_device"] == "cpu"
     assert report["validation_loss"] <= report["initial_validation_loss"]
     assert report["validation_loss"] <= min(epoch["validation_loss"] for epoch in report["epochs"])
     assert report["validation_by_goal"]
+    assert all(epoch["training_loss"] < 100 for epoch in report["epochs"])
     assert 0 <= report["goal_accuracy"] <= 1 and 0 <= report["target_accuracy"] <= 1
 
 
@@ -272,3 +351,9 @@ def test_cnn_and_guided_mutation_can_run_together(trained_policy, tmp_path):
 def test_invalid_cnn_config_is_rejected(changes):
     with pytest.raises(ValueError, match="spatial_cnn"):
         validate_sim_config(SimConfig(spatial_cnn=SpatialCNNConfig(**changes)))
+
+
+@pytest.mark.parametrize("device", ["gpu", "metal", "cuda:-1", "cuda:", "cuda:abc", None])
+def test_invalid_training_device_config_is_rejected(device):
+    with pytest.raises(ValueError, match="spatial_cnn.device"):
+        validate_sim_config(SimConfig(spatial_cnn=SpatialCNNConfig(device=device)))

@@ -40,6 +40,28 @@ def test_plot_frames_and_html_reflect_world(tmp_path):
     html = output.read_text(encoding="utf-8")
     assert "plotly" in html.lower()
     assert "Пространственная симуляция" in figure.layout.title.text
+    assert 'data-control="stride"' in html
+    assert 'data-control="step"' in html
+    assert 'plotly_hover' in html
+    assert '{plot_id}' not in html
+    assert '"auto_play"' not in html
+    assert not figure.layout.updatemenus
+    for frame, snapshot in zip(figure.frames, snapshots):
+        assert [row[4] for row in frame.data[1].customdata] == [
+            item[6] for item in snapshot.organisms]
+
+
+def test_snapshots_capture_actual_perception_without_changing_world():
+    world = SpatialWorld(replace(SpatialConfig(), initial_population=3), seed=42)
+    snapshot = capture_spatial_snapshot(world)
+    for item in snapshot.organisms:
+        organism = world.organisms[item[0]]
+        assert item[6] == world.perception(organism)
+    before = world.rng.bit_generator.state
+    figure = build_spatial_figure(world, [snapshot])
+    assert world.rng.bit_generator.state == before
+    assert capture_spatial_snapshot(world) == snapshot
+    assert "Радиус зрения" in figure.data[1].hovertemplate
 
 
 def test_visualization_works_for_empty_world_and_zero_steps():

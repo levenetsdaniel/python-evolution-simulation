@@ -126,13 +126,14 @@ class SpatialCNNConfig:
     """Optional visual target selection trained by imitating the heuristic."""
 
     enabled: bool = False
+    device: str = "auto"
     training_steps: int = 80
     training_runs: int = 2
     validation_steps: int = 20
     max_samples: int = 4096
-    epochs: int = 25
+    epochs: int = 15
     batch_size: int = 64
-    learning_rate: float = 0.0003
+    learning_rate: float = 0.003
     target_loss_weight: float = 1.0
     threads: int = 1
     model_path: str = ""
@@ -307,6 +308,10 @@ def validate_sim_config(config: SimConfig) -> None:
     _require(config.spatial_cnn.learning_rate > 0, "spatial_cnn.learning_rate must be positive")
     _require(config.spatial_cnn.target_loss_weight > 0,
              "spatial_cnn.target_loss_weight must be positive")
+    device = config.spatial_cnn.device
+    _require(isinstance(device, str) and (device in ("auto", "cpu", "cuda", "mps")
+             or (device.startswith("cuda:") and device[5:].isascii() and device[5:].isdigit())),
+             "spatial_cnn.device must be auto, cpu, cuda, cuda:N or mps")
     if config.spatial_cnn.enabled:
         _require(config.spatial.local_map_size >= 8, "spatial_cnn requires local_map_size >= 8")
         _require(config.spatial.local_map_span / 2 >= (config.spatial.base_perception
