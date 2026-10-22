@@ -28,7 +28,7 @@ def capture_spatial_snapshot(world: SpatialWorld) -> SpatialSnapshot:
     )
 
 
-def collect_spatial_snapshots(world: SpatialWorld, steps: int, interval: int = 5) -> list[SpatialSnapshot]:
+def collect_spatial_snapshots(world: SpatialWorld, steps: int, interval: int = 1) -> list[SpatialSnapshot]:
     """Run the world and capture step zero, sampled steps, and the final step."""
     if steps < 0 or interval < 1:
         raise ValueError("steps must be non-negative and interval must be positive")

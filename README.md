@@ -36,7 +36,7 @@ python3 main.py n_steps=300 seed=42 spatial_csv=artifacts/spatial_history.csv \
 
 ```bash
 python3 main.py view=true n_steps=200 seed=42 \
-  spatial_view_interval=5 spatial_html=artifacts/plots/spatial/world.html
+  spatial_view_interval=1 spatial_html=artifacts/plots/spatial/world.html
 ```
 
 Откройте созданный HTML-файл в браузере. На карте показаны организмы (цвет —
@@ -51,8 +51,10 @@ python3 main.py view=true n_steps=200 seed=42 \
 наследуемым радиусом восприятия, ограниченный границами карты. При смене кадра
 подсветка сбрасывается. В заголовке шага — температура и опасность.
 `spatial_view_interval` задаёт частоту сохранения
-кадров, но симуляция всё равно рассчитывает каждый шаг; нулевой и последний
-шаги сохраняются всегда. Для просмотра каждого шага задайте `spatial_view_interval=1`.
+кадров; по умолчанию это `1`, поэтому доступен каждый шаг. Для уменьшения размера
+HTML можно задать `spatial_view_interval=5`, тогда будут доступны только шаги
+0, 5, 10 и далее, а также последний шаг. Симуляция рассчитывает каждый шаг
+независимо от частоты сохранения кадров.
 Новые элементы управления доступны в заново созданных HTML-файлах.
 HTML работает без сервера. Можно одновременно задать
 `spatial_csv` для экспорта статистики. Начальные значения питания и локального
@@ -155,6 +157,41 @@ python3 train_advisor.py simulation.mode=spatial simulation.n_steps=100 \
 потомков нет, команда сообщает об этом вместо сохранения необученного регрессора.
 Рядом с `.cbm` сохраняется отчёт `.cbm.json` с режимом, seed и числом примеров.
 
+Для обучения одного регрессора на разных сценариях среды:
+
+```bash
+python3 train_advisor.py simulation.mode=spatial simulation.n_steps=300 \
+  'training_scenarios=[stable,warming,ice_age,harsh_seasons,famine,hazardous,chaos]' \
+  training_runs=3 validation_runs=1 iterations=500 \
+  save_path=artifacts/models/spatial_multiscenario_advisor.cbm
+```
+
+`training_runs` задаёт число прогонов **для каждого** сценария. В примере seed
+42–44 используются для обучения, seed 45 — только для проверки. Список
+`training_scenarios` берёт готовые пресеты `EnvironmentConfig`; границы нормировки
+температуры сохраняются из `simulation.environment`. Остальные настройки
+симуляции, включая питание spatial и генетику, одинаковы во всех прогонах.
+В spatial параметры `food_availability` и `food_regeneration_rate` из пресета
+не меняют источники пищи: их параметры задаёт `simulation.spatial`.
+Пустой список (по умолчанию) использует `simulation.environment` целиком,
+включая пользовательские изменения параметров.
+
+При `balance_scenarios=true` (по умолчанию) каждый сценарий с оценёнными потомками
+получает равный суммарный вес. Внутри него вес потомка по-прежнему определяется
+улучшением fitness. `balance_scenarios=false` сохраняет прежнее взвешивание
+всех примеров по fitness. Для каждого сценария отчёт содержит параметры среды,
+число примеров и итоговую численность по прогонам, а также RMSE на независимых
+seed и RMSE простого сохранения генома без мутации. Это проверка предсказания
+генома потомка; она сама по себе не доказывает рост выживаемости. Если сценарий
+не дал оценённых потомков, он отмечается в отчёте и не участвует в обучении;
+если таких сценариев нет вообще, модель не сохраняется.
+`validation_runs=0` отключает проверочные прогоны. Те же настройки поддерживаются
+при `simulation.mode=classic`; пища нормируется отдельно по ёмкости каждого
+сценария, как и при использовании модели в симуляции.
+
+Чтобы подключить модель из примера, задайте
+`spatial_guidance.advisor_path=artifacts/models/spatial_multiscenario_advisor.cbm`.
+
 Основная симуляция подключает готовый регрессор и использует фиксированные веса:
 
 ```bash
@@ -231,6 +268,56 @@ python3 comparison_run.py advisor_path=artifacts/models/classic_advisor.cbm
 организмов; следующий запрос возвращает актуальную карту. Получение карты не
 использует RNG и не зависит от HTML-визуализации. Для радиуса 32–48 можно задать
 `spatial.base_perception=32 spatial.perception_trait_scale=16`.
+
+### Профиль баланса spatial
+
+`config/balanced_config.yaml` задаёт отдельный профиль, в котором организмы
+имеют больше времени на поиск пищи и партнёра, а пища даёт меньше энергии.
+Запуск с готовыми CNN и прежним регрессором:
+
+```bash
+python3 main.py --config-name=balanced_config environment=stable \
+  n_steps=300 seed=42 view=true \
+  spatial_cnn.enabled=true \
+  spatial_cnn.model_path=artifacts/models/spatial_target_policy.pt \
+  spatial_guidance.enabled=true \
+  spatial_guidance.advisor_path=artifacts/models/spatial_advisor.cbm \
+  spatial_csv=artifacts/spatial_balanced_history.csv
+```
+
+Профиль наследует обычную конфигурацию и меняет следующие коэффициенты:
+
+| Параметр | Обычный профиль | balanced_config |
+| --- | ---: | ---: |
+| `individual.fitness_death_threshold` | 0.1 | 0.05 |
+| `individual.fitness_death_prob_coef` | 0.1 | 0.03 |
+| `individual.age_scale` | 80 | 160 |
+| `individual.age_death_power` | 1.2 | 1.8 |
+| `spatial.food_energy` | 8 | 3 |
+| `spatial.food_radius` | 10 | 6 |
+| `spatial.food_regeneration` | 30 | 10 |
+| `spatial.offspring_energy` | 30 | 45 |
+| `spatial.mutation_std` | 0.12 | 0.06 |
+| `spatial_guidance.shift_strength` | 0.7 | 0.3 |
+
+Более мягкая смертность и больший запас энергии потомка уменьшают ранние
+смерти по порогу fitness. Меньший радиус питания и приток энергии сохраняют
+необходимость перемещения. Пониженный `mutation_std` уменьшает амплитуду
+случайной мутации; при готовом CatBoost он не добавляет случайный шум.
+`shift_strength=0.3` ослабляет притяжение геномов к предсказанию регрессора,
+но не гарантирует сохранения генетического разнообразия на длинном горизонте.
+
+Профиль не добавляет бонусов за высокий ген скорости: его преимущество
+определяется перемещением и размножением, а затраты — энергией и штрафом за
+несоответствие метаболизму. Поэтому не все признаки должны расти.
+В контрольных прогонах `stable`, seed 42–46, на 300 шагах популяция с готовой
+CNN сохранилась в 5/5 случаев против 2/5 с обычными настройками; сочетание
+CNN с прежним CatBoost также дало 5/5 против 2/5. Это результат ограниченной
+проверки текущих моделей, а не гарантия устойчивости для любого seed.
+В `stable` устойчивость к жаре и холоду не влияет на температурную часть
+fitness: для проверки температурной адаптации запускайте изменяющуюся среду.
+Проверки баланса на нескольких seed не заменяют отдельную проверку других
+сценариев и более длинных прогонов. Политики в этом примере только загружаются.
 
 ### CNN для выбора цели
 
@@ -564,7 +651,7 @@ python3 main.py --help                     # полный список пара�
 | `energy_initial` | float | `70.0` | Запас энергии при рождении или инициализации |
 | `food_energy_conversion` | float | `0.5` | Сколько энергии даёт единица съеденной пищи |
 | `basal_energy_cost` | float | `1.0` | Базовый расход энергии за шаг |
-| `speed_energy_cost` | float | `2.0` | Дополнительный расход энергии от скорости |
+| `speed_energy_cost` | float | `0.3` | Дополнительный расход энергии от скорости |
 | `aggressiveness_energy_cost` | float | `3.0` | Дополнительный расход энергии от агрессивности |
 
 ### `fitness` (`FitnessConfig`)

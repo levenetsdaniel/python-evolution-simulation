@@ -6,7 +6,10 @@ defaults:
   - fitness@simulation.fitness: schema
   - _self_
 
+training_scenarios: []
 training_runs: 1
+validation_runs: 1
+balance_scenarios: true
 iterations: 100
 save_path: artifacts/models/${simulation.mode}_advisor.cbm
 

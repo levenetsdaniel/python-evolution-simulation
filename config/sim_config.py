@@ -52,7 +52,7 @@ class IndividualConfig:
     energy_initial: float = 70.0
     food_energy_conversion: float = 0.5
     basal_energy_cost: float = 1.0
-    speed_energy_cost: float = 2.0
+    speed_energy_cost: float = 0.3
     aggressiveness_energy_cost: float = 3.0
 
 
@@ -154,7 +154,7 @@ class SimConfig:
     mode: str = "spatial"
     spatial_csv: str = ""
     spatial_html: str = "artifacts/plots/spatial/world.html"
-    spatial_view_interval: int = 5
+    spatial_view_interval: int = 1
     n_steps: int = 600
     seed: int = 42
     steps_info: int = 5
@@ -183,7 +183,10 @@ class AdvisorTrainingConfig:
     """Offline CatBoost training on independent baseline simulation runs."""
 
     simulation: SimConfig = field(default_factory=lambda: SimConfig(n_steps=100))
+    training_scenarios: list[str] = field(default_factory=list)
     training_runs: int = 1
+    validation_runs: int = 1
+    balance_scenarios: bool = True
     iterations: int = 100
     save_path: str = ""  # Defaults to artifacts/models/<simulation.mode>_advisor.cbm.
 
