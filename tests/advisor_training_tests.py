@@ -3,10 +3,11 @@
 from dataclasses import replace
 import json
 from pathlib import Path
+import subprocess
+import sys
 
 import numpy as np
 import pytest
-from omegaconf import OmegaConf
 
 from config.scenarios import SCENARIOS
 from config.sim_config import AdvisorTrainingConfig, ComparisonConfig, SimConfig, SpatialConfig
@@ -130,15 +131,16 @@ def test_validation_can_be_disabled(tmp_path):
     assert report["scenarios"][0]["validation"] is None
 
 
-def test_training_entrypoint_saves_regressor(tmp_path, capsys):
-    from train_advisor import main
-
+def test_training_entrypoint_saves_regressor(tmp_path):
     path = tmp_path / "entrypoint.cbm"
-    config = AdvisorTrainingConfig(simulation=SimConfig(mode="classic", n_steps=15),
-                                   iterations=5, save_path=str(path))
-    main.__wrapped__(OmegaConf.structured(config))
+    result = subprocess.run(
+        [sys.executable, "-m", "neural.advisor_training", "simulation.mode=classic",
+         "simulation.n_steps=15", "iterations=5", "validation_runs=0", f"save_path={path}"],
+        cwd=Path(__file__).resolve().parents[1], check=True, capture_output=True, text=True,
+    )
     assert path.exists()
-    assert "Advisor saved:" in capsys.readouterr().out
+    assert "Advisor saved:" in result.stdout
+    assert json.loads(Path(str(path) + ".json").read_text())["mode"] == "classic"
 
 
 @pytest.mark.parametrize("changes", [{"training_runs": 0}, {"iterations": 0}, {"save_path": " "},

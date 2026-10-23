@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field
 from math import isfinite
 
-from .output_paths import PROFILING_DIR
-
 
 @dataclass
 class EnvironmentConfig:
@@ -136,7 +134,7 @@ class SpatialCNNConfig:
     learning_rate: float = 0.003
     target_loss_weight: float = 1.0
     threads: int = 1
-    model_path: str = ""
+    model_path: str = "artifacts/models/spatial_target_policy.pt"
     save_path: str = "artifacts/models/spatial_target_policy.pt"
 
 
@@ -189,25 +187,6 @@ class AdvisorTrainingConfig:
     balance_scenarios: bool = True
     iterations: int = 100
     save_path: str = ""  # Defaults to artifacts/models/<simulation.mode>_advisor.cbm.
-
-
-@dataclass
-class ProfilerConfig:
-    """Parameters controlling the profiler."""
-
-    simulation_config: SimConfig = field(default_factory=SimConfig)
-
-    output_dir: str = str(PROFILING_DIR)
-    prof_filename: str = "evosim.prof"
-    text_summary_filename: str = "cprofile_summary.txt"
-    html_report_filename: str = "profiling_report.html"
-
-    top_n_text: int = 50
-    top_n_callers: int = 10
-    top_n_flame: int = 15
-    top_n_console: int = 15
-
-    view: bool = False
 
 
 def validate_sim_config(config: SimConfig) -> None:

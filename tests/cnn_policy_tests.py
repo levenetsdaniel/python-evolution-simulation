@@ -26,7 +26,7 @@ def trained_policy():
                                              local_map_size=16, cluster_count=2, sources_per_cluster=3),
                        spatial_cnn=SpatialCNNConfig(enabled=True, device="cpu", training_steps=6, training_runs=1,
                                                     validation_steps=4, max_samples=64, epochs=8,
-                                                    batch_size=16, save_path=""))
+                                                    batch_size=16, model_path="", save_path=""))
     return config, build_cnn_policy(config)
 
 
@@ -62,7 +62,8 @@ def test_accelerator_training_produces_a_portable_cpu_checkpoint(device, tmp_pat
                                              cluster_count=2, sources_per_cluster=3),
                        spatial_cnn=SpatialCNNConfig(enabled=True, device=device, training_steps=4,
                                                     training_runs=1, validation_steps=2, max_samples=32,
-                                                    epochs=2, batch_size=8, save_path=str(tmp_path / "policy.pt")))
+                                                    epochs=2, batch_size=8, model_path="",
+                                                    save_path=str(tmp_path / "policy.pt")))
     policy = build_cnn_policy(config)
     assert policy.training_report["training_device"] == device
     assert next(policy.network.parameters()).device.type == "cpu"
@@ -164,6 +165,38 @@ def test_training_is_reproducible(trained_policy):
     assert first.training_report == second.training_report
     for name, weights in first.network.state_dict().items():
         assert torch.equal(weights, second.network.state_dict()[name])
+
+
+def test_default_cnn_path_loads_existing_weights_without_training(trained_policy, tmp_path, monkeypatch):
+    import neural.cnn_training as training
+    config, policy = trained_policy
+    config = replace(config, spatial_cnn=replace(config.spatial_cnn,
+                                                model_path=SpatialCNNConfig().model_path))
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / config.spatial_cnn.model_path
+    policy.save(path)
+    before = path.read_bytes()
+
+    def unexpected_training(*args, **kwargs):
+        raise AssertionError("Enabling CNN must load the default checkpoint")
+
+    monkeypatch.setattr(training, "train_cnn_policy", unexpected_training)
+    loaded = build_cnn_policy(config)
+    assert path.read_bytes() == before
+    for name, weights in policy.network.state_dict().items():
+        assert torch.equal(weights, loaded.network.state_dict()[name])
+
+
+def test_missing_default_checkpoint_reports_an_error_without_training(tmp_path, monkeypatch):
+    import neural.cnn_training as training
+    monkeypatch.chdir(tmp_path)
+
+    def unexpected_training(*args, **kwargs):
+        raise AssertionError("A missing checkpoint must not trigger training")
+
+    monkeypatch.setattr(training, "train_cnn_policy", unexpected_training)
+    with pytest.raises(FileNotFoundError, match="CNN model file does not exist"):
+        build_cnn_policy(SimConfig(spatial_cnn=SpatialCNNConfig(enabled=True)))
 
 
 def test_recording_targets_preserves_the_heuristic_trajectory(trained_policy):

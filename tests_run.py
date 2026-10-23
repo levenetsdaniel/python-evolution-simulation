@@ -2,9 +2,9 @@
 Run all EvoSim test files.
 
 Usage:
-    python run_tests.py                # run all three files
-    python run_tests.py -k satiation   # filter by name (forwarded to pytest)
-    python run_tests.py -x              # stop on first failure
+    python tests_run.py                # run the full test suite
+    python tests_run.py -k satiation    # filter by name (forwarded to pytest)
+    python tests_run.py -x              # stop on first failure
 """
 
 import sys

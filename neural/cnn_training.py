@@ -244,7 +244,9 @@ def build_cnn_policy(config: SimConfig) -> CNNPolicy:
         raise ValueError("CNN policy requires mode=spatial and spatial_cnn.enabled=true")
     torch.set_num_threads(config.spatial_cnn.threads)
     if config.spatial_cnn.model_path:
-        return CNNPolicy.load(config.spatial_cnn.model_path, config)
+        policy = CNNPolicy.load(config.spatial_cnn.model_path, config)
+        print(f"CNN model loaded: {config.spatial_cnn.model_path}")
+        return policy
     policy = train_cnn_policy(config)
     if config.spatial_cnn.save_path:
         path = Path(config.spatial_cnn.save_path)

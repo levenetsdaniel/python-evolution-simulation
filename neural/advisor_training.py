@@ -6,7 +6,9 @@ import json
 from dataclasses import asdict, replace
 from pathlib import Path
 
+import hydra
 import numpy as np
+from omegaconf import OmegaConf
 
 from config.sim_config import AdvisorTrainingConfig, SimConfig, validate_sim_config
 from config.scenarios import SCENARIOS
@@ -28,7 +30,7 @@ def _schema(config: SimConfig) -> dict:
 def load_pretrained_advisor(path: str | Path, config: SimConfig) -> CatBoostAdvisor:
     """Load without fitting. Embedded schemas are checked when present."""
     if not str(path).strip():
-        raise ValueError("advisor_path is required; train a model with train_advisor.py first")
+        raise ValueError("advisor_path is required; train a model with python -m neural.advisor_training first")
     advisor = CatBoostAdvisor(verbose=False)
     advisor.load(path)
     metadata = advisor.model.get_metadata()
@@ -154,3 +156,19 @@ def train_advisor_model(config: AdvisorTrainingConfig) -> tuple[CatBoostAdvisor,
               "model_path": save_path}
     Path(save_path + ".json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     return advisor, report
+
+
+@hydra.main(version_base=None, config_path="../config", config_name="advisor_config")
+def main(cfg: AdvisorTrainingConfig) -> None:
+    """Train a standalone advisor with ``python -m neural.advisor_training``."""
+    config = OmegaConf.to_object(cfg)
+    _, report = train_advisor_model(config)
+    print(f"Advisor saved: {report['model_path']}")
+    print(report)
+
+
+if __name__ == "__main__":
+    from config.registry import register_configs
+
+    register_configs()
+    main()

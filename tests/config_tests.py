@@ -80,33 +80,6 @@ def test_sim_config_allows_nested_individual_and_fitness_overrides():
     assert cfg.population.initial_size == 250
 
 
-def test_profile_config_contains_full_simulation_config():
-    cfg = _compose("profile_config")
-
-    assert cfg.simulation_config.environment.temp_start == 20.0
-    assert cfg.simulation_config.population.initial_size == 100
-    assert cfg.simulation_config.individual.age_scale == 160.0
-    assert cfg.simulation_config.fitness.score_floor == 0.05
-
-
-def test_profile_config_allows_nested_simulation_overrides():
-    cfg = _compose(
-        "profile_config",
-        [
-            "environment@simulation_config.environment=chaos",
-            "simulation_config.population.initial_size=300",
-            "simulation_config.individual.age_scale=95.0",
-            "simulation_config.fitness.score_floor=0.01",
-        ],
-    )
-
-    assert cfg.simulation_config.environment.food_availability == 4000.0
-    assert cfg.simulation_config.environment.food_regeneration_rate == 0.3
-    assert cfg.simulation_config.population.initial_size == 300
-    assert cfg.simulation_config.individual.age_scale == 95.0
-    assert cfg.simulation_config.fitness.score_floor == 0.01
-
-
 def test_compare_config_contains_separate_simulation_and_ml_settings():
     cfg = _compose("compare_config")
 
