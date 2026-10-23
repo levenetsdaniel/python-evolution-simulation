@@ -32,9 +32,10 @@ def _compose(config_name: str, overrides: list[str] | None = None):
 def test_sim_config_contains_all_runtime_subconfigs():
     cfg = _compose("sim_config")
 
+    assert cfg == SimConfig()
     assert cfg.environment.temp_start == 20.0
     assert cfg.population.initial_size == 100
-    assert cfg.individual.age_scale == 80.0
+    assert cfg.individual.age_scale == 160.0
     assert cfg.fitness.score_floor == 0.05
     assert not cfg.spatial_guidance.enabled
 
@@ -84,7 +85,7 @@ def test_profile_config_contains_full_simulation_config():
 
     assert cfg.simulation_config.environment.temp_start == 20.0
     assert cfg.simulation_config.population.initial_size == 100
-    assert cfg.simulation_config.individual.age_scale == 80.0
+    assert cfg.simulation_config.individual.age_scale == 160.0
     assert cfg.simulation_config.fitness.score_floor == 0.05
 
 

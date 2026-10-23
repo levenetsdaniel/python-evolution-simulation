@@ -44,21 +44,21 @@ def load_pretrained_advisor(path: str | Path, config: SimConfig) -> CatBoostAdvi
 
 def _collect_samples(simulation: SimConfig, seeds: list[int]) -> tuple[TrainingBuffer, list[dict]]:
     """Keep pending birth IDs local to each independent baseline run."""
-    food_capacity = (simulation.spatial.cluster_count * simulation.spatial.sources_per_cluster
-                     * simulation.spatial.food_capacity if simulation.mode == "spatial"
-                     else simulation.environment.food_availability)
-    combined = TrainingBuffer(simulation.environment, max_food=max(1.0, food_capacity))
+    combined = None
     runs = []
     for seed in seeds:
-        buffer = TrainingBuffer(simulation.environment, max_food=combined.max_food)
         run_config = replace(simulation, seed=seed)
-        world = (SpatialWorld.from_sim_config(run_config, recorder=buffer) if simulation.mode == "spatial"
-                 else Model(run_config, recorder=buffer))
+        world = (SpatialWorld.from_sim_config(run_config) if simulation.mode == "spatial"
+                 else Model(run_config))
+        buffer = TrainingBuffer(simulation.environment, max_food=max(1.0, world.environment.food_capacity))
+        world.recorder = buffer
+        if combined is None:
+            combined = TrainingBuffer(simulation.environment, max_food=buffer.max_food)
         world.run(simulation.n_steps)
         combined.samples.extend(buffer.samples)
         runs.append({"seed": seed, "samples": len(buffer.samples),
                      "final_population": sum(agent.is_alive for agent in world.agents)})
-    return combined, runs
+    return (combined if combined is not None else TrainingBuffer(simulation.environment, max_food=1.0)), runs
 
 
 def _evaluate_advisor(advisor: CatBoostAdvisor, buffer: TrainingBuffer) -> dict | None:

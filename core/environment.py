@@ -162,18 +162,21 @@ class FoodSource:
 
 
 class SpatialEnvironment(Environment):
-    """Spatial food supply, consumption, disappearance and relocation."""
+    """Spatial resources scaled by the shared environment's food conditions."""
 
     def __init__(self, model: SpatialWorld, config: SpatialConfig,
                  environment_config: EnvironmentConfig | None = None):
         super().__init__(model, environment_config)
         self.spatial_config = config
+        self.food_scale = self.config.food_availability / EnvironmentConfig().food_availability
+        self.food_capacity = (config.cluster_count * config.sources_per_cluster
+                              * config.food_capacity * self.food_scale)
         self.food_sources: list[FoodSource] = []
         self.disappeared_this_step = 0
         self.spawned_this_step = 0
         self._generate_food()
-        self.food_capacity = config.cluster_count * config.sources_per_cluster * config.food_capacity
         self._sync_food_supply()
+        self.prev_params = self.current_params.copy()
 
     def _sync_food_supply(self) -> None:
         """Expose spatial food totals through the shared environment interface."""
@@ -181,11 +184,16 @@ class SpatialEnvironment(Environment):
         self.current_params["food_availability"] = self.current_food
 
     def _new_source(self, x: float, y: float) -> FoodSource:
+        """Apply the same scenario to initial sources and relocated replacements."""
         cfg = self.spatial_config
-        return FoodSource(float(x), float(y), cfg.food_initial, cfg.food_capacity,
-                          cfg.food_regeneration, cfg.food_radius)
+        return FoodSource(float(x), float(y), cfg.food_initial * self.food_scale,
+                          cfg.food_capacity * self.food_scale,
+                          cfg.food_regeneration * self.config.food_regeneration_rate,
+                          cfg.food_radius)
 
     def _generate_food(self) -> None:
+        if self.food_capacity == 0:
+            return
         cfg = self.spatial_config
         for _ in range(cfg.cluster_count):
             cx = self.model.rng.uniform(0, cfg.width)
@@ -257,6 +265,8 @@ class SpatialEnvironment(Environment):
                 survivors.append(source)
         self.food_sources[:] = survivors
         vacancies = self.spatial_config.cluster_count * self.spatial_config.sources_per_cluster - len(self.food_sources)
+        if self.food_capacity == 0:
+            vacancies = 0
         for _ in range(max(0, vacancies)):
             if self.model.rng.random() < self.spatial_config.food_spawn_probability:
                 x = self.model.rng.uniform(0, self.spatial_config.width)

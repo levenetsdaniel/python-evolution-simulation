@@ -1,12 +1,9 @@
-"""
-Presets of initial conditions and climate dynamics.
+"""Shared climate and food presets for classic and spatial simulations.
 
-Using:
-    from config.scenarios import warming
-    config = warming()                                # default
-    config = warming(SimConfig(seed=7, n_steps=800))  # with custom parameters
-
-    config = SCENARIOS["harsh_seasons"]()
+Choose with ``environment=famine`` in Hydra, or pass
+``SCENARIOS["famine"]`` as the world's environment configuration.
+Spatial sources scale their capacity/initial stock by food availability
+relative to EnvironmentConfig defaults, and regeneration by the preset rate.
 """
 
 from .sim_config import EnvironmentConfig

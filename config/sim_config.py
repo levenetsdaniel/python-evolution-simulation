@@ -40,10 +40,10 @@ class PopulationConfig:
 class IndividualConfig:
     """Parameters controlling individual agent behaviour and survival."""
 
-    fitness_death_threshold: float = 0.1
-    fitness_death_prob_coef: float = 0.1
-    age_scale: float = 80.0
-    age_death_power: float = 1.2
+    fitness_death_threshold: float = 0.05
+    fitness_death_prob_coef: float = 0.03
+    age_scale: float = 160.0
+    age_death_power: float = 1.8
     food_need_size_coef: float = 5.0
     food_need_resilience_coef: float = 2.0
     food_need_speed_coef: float = 1.0
@@ -73,7 +73,7 @@ class FitnessConfig:
 
 @dataclass
 class SpatialConfig:
-    """Parameters for the independent spatial life cycle (one step is one time unit)."""
+    """Spatial life cycle; food values are per-source bases before environment scaling."""
 
     width: float = 100.0
     height: float = 100.0
@@ -86,10 +86,10 @@ class SpatialConfig:
     cluster_spread: float = 8.0
     food_capacity: float = 100.0
     food_initial: float = 100.0
-    food_regeneration: float = 30.0
-    food_radius: float = 10.0
+    food_regeneration: float = 10.0
+    food_radius: float = 6.0
     food_bite: float = 10.0
-    food_energy: float = 8.0
+    food_energy: float = 3.0
     food_disappearance_probability: float = 0.6
     food_spawn_probability: float = 0.3
     movement_energy_cost: float = 0.5
@@ -104,12 +104,12 @@ class SpatialConfig:
     foraging_threshold: float = 0.6
     satiation_threshold: float = 0.85
     reproduction_energy: float = 90.0
-    offspring_energy: float = 30.0
+    offspring_energy: float = 45.0
     reproduction_rate: float = 1.0
     min_reproduction_age: int = 2
     mating_radius: float = 2.0  # Local-map cells; converted to world distance.
     offspring_offset: float = 2.0
-    mutation_std: float = 0.12
+    mutation_std: float = 0.06
 
 
 @dataclass
@@ -117,7 +117,7 @@ class SpatialGuidanceConfig:
     """Optional CatBoost guidance for spatial offspring mutations."""
 
     enabled: bool = False
-    shift_strength: float = 0.7
+    shift_strength: float = 0.3
     advisor_path: str = "artifacts/models/spatial_advisor.cbm"
 
 

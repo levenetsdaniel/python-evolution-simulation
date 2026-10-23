@@ -1,3 +1,4 @@
+# Parameter defaults come from the dataclass schemas in sim_config.py.
 defaults:
   - sim_schema
   - environment: default

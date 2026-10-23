@@ -114,8 +114,8 @@ def test_multiple_scenarios_are_balanced_and_validated_on_separate_seeds(tmp_pat
         assert fitted["weights"][offset:offset + count].sum() == pytest.approx(0.5)
         assert row["validation_samples"] > 0
         assert all(np.isfinite(value) and value >= 0 for value in row["validation"].values())
-        assert row["food_normalization"] == (6000.0 if mode == "spatial" else
-                                             SCENARIOS[row["name"]].food_availability)
+        food = SCENARIOS[row["name"]].food_availability
+        assert row["food_normalization"] == pytest.approx(6000.0 * food / 10000 if mode == "spatial" else food)
         offset += count
     loaded = load_pretrained_advisor(config.save_path, replace(simulation, environment=SCENARIOS["famine"]))
     np.testing.assert_allclose(advisor.predict(np.zeros(22)), loaded.predict(np.zeros(22)))

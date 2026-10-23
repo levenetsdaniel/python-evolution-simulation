@@ -7,6 +7,7 @@ import pytest
 import mesa
 
 from config.sim_config import EnvironmentConfig, IndividualConfig, PopulationConfig, SpatialConfig
+from config.scenarios import SCENARIOS
 from core.enums import DeathCause, Gender
 from core.environment import Environment
 from core.fitness import fitness
@@ -109,6 +110,99 @@ def test_spatial_uses_classic_environment_and_fitness():
         satiation=heat_adapted.satiation))
     assert row["AvgFitness"] == pytest.approx((heat_adapted.fitness + cold_adapted.fitness) / 2)
     assert world.environment.current_params["food_availability"] == row["FoodAvailable"]
+
+
+@pytest.mark.parametrize(("name", "capacity", "regeneration"), [
+    ("default", 100, 10), ("stable", 100, 10), ("warming", 100, 8.5),
+    ("ice_age", 70, 4.5), ("harsh_seasons", 100, 6.5),
+    ("famine", 25, 1.5), ("hazardous", 100, 8.5), ("chaos", 40, 3),
+])
+def test_scenarios_control_spatial_sources_and_climate(name, capacity, regeneration):
+    config = replace(SpatialConfig(), initial_population=0, cluster_count=2, sources_per_cluster=3)
+    environment = replace(SCENARIOS[name])
+    world = SpatialWorld(config, seed=17, environment_config=environment)
+    assert len(world.food_sources) == 6
+    assert world.environment.food_capacity == pytest.approx(6 * capacity)
+    assert world.history[0]["FoodAvailable"] == pytest.approx(6 * capacity)
+    assert world.environment.prev_params == world.environment.current_params
+    assert world.environment.current_params["temperature"] == environment.temp_start
+    for source in world.food_sources:
+        assert source.capacity == pytest.approx(capacity)
+        assert source.stock == pytest.approx(capacity)
+        assert source.regeneration == pytest.approx(regeneration)
+    source = world.food_sources[0]
+    source.stock = capacity / 2
+    world.update_resources()
+    assert source.stock == pytest.approx(min(capacity, capacity / 2 + regeneration))
+    world.step()
+    assert world.history[-1]["Temperature"] == pytest.approx(environment.temp_start + environment.temp_step)
+    assert world.history[-1]["HazardLevel"] == pytest.approx(environment.hazard_level_start + environment.hazard_step)
+    # Effective resources do not mutate the user's base configuration or presets.
+    assert config.food_capacity == 100 and config.food_regeneration == 10
+    assert SCENARIOS[name] == environment
+
+
+def test_scenario_scaling_combines_with_custom_spatial_food_parameters():
+    environment = EnvironmentConfig(food_availability=20000, food_regeneration_rate=0.5)
+    world = small_world(environment_config=environment, cluster_count=1, sources_per_cluster=1,
+                        food_capacity=80, food_initial=20, food_regeneration=7)
+    source = world.food_sources[0]
+    assert (source.capacity, source.stock, source.regeneration) == (160, 40, 3.5)
+    assert world.environment.food_capacity == 160
+
+
+def test_relocated_sources_keep_scenario_food_parameters():
+    world = small_world(environment_config=SCENARIOS["famine"], cluster_count=1, sources_per_cluster=1,
+                        food_capacity=8, food_initial=4, food_regeneration=2,
+                        food_disappearance_probability=1, food_spawn_probability=1)
+    previous = world.food_sources[0]
+    previous.stock = 0
+    world.update_resources()
+    source = world.food_sources[0]
+    assert source is not previous
+    assert (source.capacity, source.stock) == (2, 1)
+    assert source.regeneration == pytest.approx(0.3)
+    assert world.environment.disappeared_this_step == world.environment.spawned_this_step == 1
+    assert world.environment.food_capacity == 2
+    source.stock = 0.5
+    world.update_resources()
+    assert source.stock == pytest.approx(0.8)
+
+
+def test_zero_scenario_food_prevents_source_generation_and_respawning():
+    world = small_world(environment_config=EnvironmentConfig(food_availability=0),
+                        cluster_count=1, sources_per_cluster=2, food_spawn_probability=1)
+    assert world.food_sources == []
+    assert world.environment.food_capacity == 0
+    world.run(10)
+    assert world.food_sources == []
+    assert all(row["FoodAvailable"] == row["FoodSourceCount"] == 0 for row in world.history)
+
+
+def test_zero_environment_regeneration_leaves_existing_stock_unchanged():
+    world = small_world(environment_config=EnvironmentConfig(food_regeneration_rate=0),
+                        cluster_count=1, sources_per_cluster=1)
+    source = world.food_sources[0]
+    source.stock = 3
+    world.update_resources()
+    assert source.stock == 3
+    assert source.regeneration == 0
+
+
+@pytest.mark.parametrize("name", SCENARIOS)
+def test_each_spatial_scenario_runs_300_steps_deterministically(name):
+    config = replace(SpatialConfig(), initial_population=8, max_population=20,
+                     cluster_count=2, sources_per_cluster=3)
+    first = SpatialWorld(config, seed=31, environment_config=SCENARIOS[name])
+    second = SpatialWorld(config, seed=31, environment_config=SCENARIOS[name])
+    first.run(300)
+    second.run(300)
+    assert first.history == second.history
+    assert first.step_count == 300
+    assert all(0 <= row["PopulationSize"] <= 20 and
+               0 <= row["FoodAvailable"] <= first.environment.food_capacity + 1e-9 for row in first.history)
+    assert all(0 <= agent.state.x <= first.width and 0 <= agent.state.y <= first.height
+               for agent in first.agents)
 
 
 def test_environment_can_supply_conditions_by_position():

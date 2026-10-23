@@ -121,8 +121,36 @@ world.export_csv("artifacts/spatial_history.csv")
 python3 main.py environment=warming n_steps=300 spatial_csv=artifacts/spatial_history.csv
 ```
 
-Поля `environment.food_availability` и `environment.food_regeneration_rate`
-здесь не используются: количество и восстановление пищи задаются через `spatial.*`.
+Все пресеты `environment` работают в spatial с климатом, опасностью и питанием.
+`spatial.food_capacity`, `spatial.food_initial` и `spatial.food_regeneration`
+задают базовые значения на источник. Среда масштабирует их:
+
+```text
+food_scale = environment.food_availability / 10000
+capacity = spatial.food_capacity × food_scale
+initial_stock = spatial.food_initial × food_scale
+regeneration = spatial.food_regeneration × environment.food_regeneration_rate
+```
+
+При значениях spatial по умолчанию эффективные параметры одного источника:
+
+| Сценарий | Ёмкость и начальный запас | Восстановление за шаг |
+| --- | ---: | ---: |
+| `default`, `stable` | 100 | 10 |
+| `warming`, `hazardous` | 100 | 8.5 |
+| `ice_age` | 70 | 4.5 |
+| `harsh_seasons` | 100 | 6.5 |
+| `famine` | 25 | 1.5 |
+| `chaos` | 40 | 3 |
+
+Количество источников и радиус питания задаются `spatial.*`.
+Новые источники после исчезновения получают те же эффективные параметры.
+При `environment.food_availability=0` источники не создаются и не появляются
+повторно. Нулевая регенерация запрещает восстановление существующих источников;
+появление новых отдельно управляется `spatial.food_spawn_probability`.
+В классическом режиме `food_regeneration_rate` остаётся долей дефицита пищи,
+а в spatial служит множителем базовой скорости восстановления источника.
+Общие параметры среды применяются так же при запуске через Python.
 
 Размножение локальное: достаточно взрослая самка с нужным запасом энергии
 может произвести потомка с самцом в радиусе `spatial.mating_radius=2` ячейки
@@ -170,9 +198,9 @@ python3 train_advisor.py simulation.mode=spatial simulation.n_steps=300 \
 42–44 используются для обучения, seed 45 — только для проверки. Список
 `training_scenarios` берёт готовые пресеты `EnvironmentConfig`; границы нормировки
 температуры сохраняются из `simulation.environment`. Остальные настройки
-симуляции, включая питание spatial и генетику, одинаковы во всех прогонах.
-В spatial параметры `food_availability` и `food_regeneration_rate` из пресета
-не меняют источники пищи: их параметры задаёт `simulation.spatial`.
+симуляции, включая базовые параметры источников spatial и генетику, одинаковы
+во всех прогонах. Параметры `food_availability` и `food_regeneration_rate`
+сценария масштабируют запас, ёмкость и восстановление пространственной пищи.
 Пустой список (по умолчанию) использует `simulation.environment` целиком,
 включая пользовательские изменения параметров.
 
@@ -197,7 +225,7 @@ seed и RMSE простого сохранения генома без мута�
 ```bash
 python3 main.py spatial_guidance.enabled=true n_steps=300 seed=42 \
   spatial_guidance.advisor_path=artifacts/models/spatial_advisor.cbm \
-  spatial_guidance.shift_strength=0.7
+  spatial_guidance.shift_strength=0.3
 ```
 
 Если файла нет, запуск завершается ошибкой; обучение автоматически не начинается.
@@ -269,36 +297,36 @@ python3 comparison_run.py advisor_path=artifacts/models/classic_advisor.cbm
 использует RNG и не зависит от HTML-визуализации. Для радиуса 32–48 можно задать
 `spatial.base_perception=32 spatial.perception_trait_scale=16`.
 
-### Профиль баланса spatial
+### Параметры spatial по умолчанию
 
-`config/balanced_config.yaml` задаёт отдельный профиль, в котором организмы
-имеют больше времени на поиск пищи и партнёра, а пища даёт меньше энергии.
-Запуск с готовыми CNN и прежним регрессором:
+Параметры жизненного цикла заданы в `config/sim_config.py` и применяются при
+обычном запуске `main.py`, а также при создании `SimConfig()` из Python.
+Запуск с готовой CNN:
 
 ```bash
-python3 main.py --config-name=balanced_config environment=stable \
-  n_steps=300 seed=42 view=true \
+python3 main.py environment=stable n_steps=300 seed=42 view=true \
   spatial_cnn.enabled=true \
   spatial_cnn.model_path=artifacts/models/spatial_target_policy.pt \
-  spatial_guidance.enabled=true \
-  spatial_guidance.advisor_path=artifacts/models/spatial_advisor.cbm \
-  spatial_csv=artifacts/spatial_balanced_history.csv
+  spatial_csv=artifacts/spatial_history.csv
 ```
 
-Профиль наследует обычную конфигурацию и меняет следующие коэффициенты:
+Основные значения по умолчанию:
 
-| Параметр | Обычный профиль | balanced_config |
-| --- | ---: | ---: |
-| `individual.fitness_death_threshold` | 0.1 | 0.05 |
-| `individual.fitness_death_prob_coef` | 0.1 | 0.03 |
-| `individual.age_scale` | 80 | 160 |
-| `individual.age_death_power` | 1.2 | 1.8 |
-| `spatial.food_energy` | 8 | 3 |
-| `spatial.food_radius` | 10 | 6 |
-| `spatial.food_regeneration` | 30 | 10 |
-| `spatial.offspring_energy` | 30 | 45 |
-| `spatial.mutation_std` | 0.12 | 0.06 |
-| `spatial_guidance.shift_strength` | 0.7 | 0.3 |
+| Параметр | Значение |
+| --- | ---: |
+| `individual.fitness_death_threshold` | 0.05 |
+| `individual.fitness_death_prob_coef` | 0.03 |
+| `individual.age_scale` | 160 |
+| `individual.age_death_power` | 1.8 |
+| `spatial.food_energy` | 3 |
+| `spatial.food_radius` | 6 |
+| `spatial.food_regeneration` | 10 |
+| `spatial.offspring_energy` | 45 |
+| `spatial.mutation_std` | 0.06 |
+| `spatial_guidance.shift_strength` | 0.3 |
+
+Общие параметры `individual.*` используются также в классическом режиме,
+профилировании и подготовке обучающих данных.
 
 Более мягкая смертность и больший запас энергии потомка уменьшают ранние
 смерти по порогу fitness. Меньший радиус питания и приток энергии сохраняют
@@ -307,13 +335,16 @@ python3 main.py --config-name=balanced_config environment=stable \
 `shift_strength=0.3` ослабляет притяжение геномов к предсказанию регрессора,
 но не гарантирует сохранения генетического разнообразия на длинном горизонте.
 
-Профиль не добавляет бонусов за высокий ген скорости: его преимущество
+Преимущество высокого гена скорости
 определяется перемещением и размножением, а затраты — энергией и штрафом за
 несоответствие метаболизму. Поэтому не все признаки должны расти.
 В контрольных прогонах `stable`, seed 42–46, на 300 шагах популяция с готовой
-CNN сохранилась в 5/5 случаев против 2/5 с обычными настройками; сочетание
+CNN сохранилась в 5/5 случаев против 2/5 с прежними настройками; сочетание
 CNN с прежним CatBoost также дало 5/5 против 2/5. Это результат ограниченной
 проверки текущих моделей, а не гарантия устойчивости для любого seed.
+Историческая длинная серия до подключения питания сценариев, с отключённым CatBoost, описана в
+[отчёте о 2000 шагах](docs/spatial_evaluation.md): она сравнивает эвристику и CNN,
+отдельно учитывает новые для CNN seed и дополнительный дефицит пищи.
 В `stable` устойчивость к жаре и холоду не влияет на температурную часть
 fitness: для проверки температурной адаптации запускайте изменяющуюся среду.
 Проверки баланса на нескольких seed не заменяют отдельную проверку других
@@ -611,8 +642,8 @@ python3 main.py --help                     # полный список пара�
 
 | Ключ | Тип | По умолчанию | Описание |
 |---|---|---|---|
-| `food_availability` | float | `10000.0` | Ёмкость пищевой базы |
-| `food_regeneration_rate` | float | `1.0` | Доля дефицита пищи, восстанавливаемая за шаг; `1.0` полностью восполняет ресурс |
+| `food_availability` | float | `10000.0` | В classic — ёмкость пищевой базы; в spatial — масштаб ёмкости и начального запаса источников относительно 10000 |
+| `food_regeneration_rate` | float | `1.0` | В classic — доля дефицита, восстанавливаемая за шаг; в spatial — множитель `spatial.food_regeneration` |
 | `temp_start` | float | `20.0` | Стартовая температура (°C) |
 | `temp_step` | float | `0.05` | Изменение температуры за шаг; на границах диапазона направление меняется плавно |
 | `hazard_level_start` | float | `0.1` | Стартовый уровень опасности |
@@ -639,10 +670,10 @@ python3 main.py --help                     # полный список пара�
 
 | Ключ | Тип | По умолчанию | Описание |
 |---|---|---|---|
-| `fitness_death_threshold` | float | `0.1` | Порог fitness, ниже которого особь гибнет мгновенно |
-| `fitness_death_prob_coef` | float | `0.1` | Множитель вероятности смерти от низкого fitness |
-| `age_scale` | float | `80.0` | Масштаб возрастной смертности |
-| `age_death_power` | float | `1.2` | Показатель степени в возрастной функции смертности |
+| `fitness_death_threshold` | float | `0.05` | Порог fitness, ниже которого особь гибнет мгновенно |
+| `fitness_death_prob_coef` | float | `0.03` | Множитель вероятности смерти от низкого fitness |
+| `age_scale` | float | `160.0` | Масштаб возрастной смертности |
+| `age_death_power` | float | `1.8` | Показатель степени в возрастной функции смертности |
 | `food_need_size_coef` | float | `5.0` | Вклад `size` в потребность в пище |
 | `food_need_resilience_coef` | float | `2.0` | Вклад `resilience` в потребность в пище |
 | `food_need_speed_coef` | float | `1.0` | Вклад `speed` в потребность в пище |
@@ -676,7 +707,7 @@ python3 main.py --help                     # полный список пара�
 
 ```bash
 python3 main.py environment=warming
-python3 main.py environment=famine population.initial_size=200 n_steps=1000
+python3 main.py environment=famine spatial.initial_population=200 n_steps=1000
 ```
 
 | Имя | Что моделирует | Что нагружает |
@@ -686,9 +717,9 @@ python3 main.py environment=famine population.initial_size=200 n_steps=1000
 | `warming` | Потепление с холодного старта и слегка замедленным восстановлением пищи | `heat_resistance` |
 | `ice_age` | Похолодание, меньшая ёмкость и медленное восстановление пищи | `cold_resistance`, метаболизм |
 | `harsh_seasons` | Быстрые тепловые циклы и неполное восстановление ресурса | Двусторонняя терморегуляция |
-| `famine` | Ёмкость пищи ≈4× ниже нормы и регенерация 15% дефицита за шаг | Конкуренция, `size`, метаболизм |
+| `famine` | Ёмкость пищи в 4 раза ниже нормы; восстановление spatial в 6.67 раза медленнее | Конкуренция, `size`, метаболизм |
 | `hazardous` | Уровень опасности растёт в 5× быстрее, восстановление пищи замедлено | `resilience` |
-| `chaos` | Сезонность, растущая опасность, малая ёмкость и регенерация 30% | Стресс-тест |
+| `chaos` | Сезонность, растущая опасность, ёмкость пищи 40% и коэффициент восстановления 30% | Стресс-тест |
 
 ---
 
