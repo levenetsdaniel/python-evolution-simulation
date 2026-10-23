@@ -36,7 +36,7 @@ class StubModel(mesa.Model):
     def __init__(self, env=None, seed=0):
         super().__init__(rng=seed)
         self.environment = SimpleNamespace(current_params=dict(env or DEFAULT_ENV))
-        self.training_buffer = _Buffer()
+        self.recorder = _Buffer()
 
 
 class ConfiguredStubModel(StubModel):
@@ -72,12 +72,12 @@ def make_ind(model=None, genome=None, **kwargs):
 def test_init_sets_all_fields():
     genome = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7])
     m = StubModel()
-    ind = make_ind(model=m, genome=genome, age=3, generation=5, parent_ids=(42, 99))
+    ind = make_ind(model=m, genome=genome, age=3, birth_step=5, parent_ids=(42, 99))
 
     assert ind.is_alive and ind.death_cause is None
     assert ind.fitness is None
     assert ind.food_eaten == 0
-    assert ind.age == 3 and ind.generation == 5
+    assert ind.age == 3 and ind.birth_step == 5
     assert ind.parent_ids == (42, 99)
     assert ind.gender in list(Gender)
     assert ind in m.agents
@@ -124,13 +124,14 @@ def test_getitem_matches_genes_map():
         assert ind[label] == ind.genes_map[label]
 
 
-def test_satiation_unfed_full_and_overfed():
+def test_energy_satiation_and_food_satiation_are_separate():
     ind = make_ind()
-    assert ind.satiation == 0.0
+    assert ind.satiation == pytest.approx(ICFG.energy_initial / ICFG.energy_capacity)
+    assert ind.food_satiation == 0.0
     ind.food_eaten = ind.food_need
-    assert ind.satiation == pytest.approx(1.0)
+    assert ind.food_satiation == pytest.approx(1.0)
     ind.food_eaten = ind.food_need * 2
-    assert ind.satiation == pytest.approx(2.0)
+    assert ind.food_satiation == pytest.approx(1.0)
 
 
 def test_compute_fitness_matches_pure_function_and_does_not_mutate():
@@ -139,9 +140,46 @@ def test_compute_fitness_matches_pure_function_and_does_not_mutate():
     ind.food_eaten = ind.food_need
     snapshot = dict(ind.genes_map)
 
-    expected = fitness_fn({**ind.genes_map, "satiation": 1.0}, m.environment.current_params)
+    expected = fitness_fn({**ind.genes_map, "satiation": ind.satiation}, m.environment.current_params)
     assert ind.compute_fitness() == pytest.approx(expected)
     assert ind.genes_map == snapshot
+
+
+def test_step_converts_food_to_energy_then_pays_metabolic_cost():
+    config = IndividualConfig(
+        energy_capacity=100.0,
+        energy_initial=40.0,
+        food_energy_conversion=0.5,
+        basal_energy_cost=1.0,
+        speed_energy_cost=0.0,
+        aggressiveness_energy_cost=0.0,
+    )
+    m = ConfiguredStubModel(individual=config)
+    ind = make_ind(model=m)
+    ind.food_eaten = 20
+    m.rng = NEVER_DIES
+
+    ind.step()
+
+    assert ind.energy == pytest.approx(49.0)
+
+
+def test_step_can_survive_a_hungry_step_using_energy_reserve():
+    config = IndividualConfig(
+        energy_capacity=100.0,
+        energy_initial=80.0,
+        basal_energy_cost=1.0,
+        speed_energy_cost=0.0,
+        aggressiveness_energy_cost=0.0,
+    )
+    m = ConfiguredStubModel(individual=config)
+    ind = make_ind(model=m)
+    m.rng = NEVER_DIES
+
+    ind.step()
+
+    assert ind.is_alive
+    assert ind.energy == pytest.approx(79.0)
 
 
 def test_compute_fitness_uses_model_fitness_and_environment_config():
@@ -156,14 +194,14 @@ def test_compute_fitness_uses_model_fitness_and_environment_config():
         environment=EnvironmentConfig(min_temperature=-30.0, max_temperature=50.0),
     )
     ind = make_ind(model=configured_model)
-    ind.food_eaten = ind.food_need
+    ind.energy = ind.config.energy_capacity
 
     assert ind.compute_fitness() > default_score
 
 def test_step_records_fitness_and_increments_age_when_alive():
     m = StubModel()
     ind = make_ind(model=m, age=4)
-    ind.food_eaten = ind.food_need
+    ind.energy = ind.config.energy_capacity
     m.rng = NEVER_DIES
 
     ind.step()
@@ -171,12 +209,26 @@ def test_step_records_fitness_and_increments_age_when_alive():
     assert ind.is_alive and ind.death_cause is None
     assert ind.age == 5
     assert ind.fitness is not None
-    assert m.training_buffer.records == [(ind.unique_id, ind.fitness)]
+    assert m.recorder.records == [(ind.unique_id, ind.fitness)]
+
+
+def test_step_does_not_change_an_agent_already_marked_dead():
+    m = StubModel()
+    ind = make_ind(model=m, age=4)
+    ind.is_alive = False
+    ind.death_cause = DeathCause.COMPETITION
+
+    ind.step()
+
+    assert ind.age == 4
+    assert ind.fitness is None
+    assert ind.death_cause == DeathCause.COMPETITION
+    assert m.recorder.records == []
 
 def test_step_age_cause_when_old_and_healthy():
     m = StubModel()
     ind = make_ind(model=m, age=300)
-    ind.food_eaten = ind.food_need
+    ind.energy = ind.config.energy_capacity
     m.rng = ALWAYS_DIES
 
     ind.step()
@@ -208,9 +260,23 @@ def test_from_parents_inherits_labels_ids_and_genome():
     p1, p2 = make_ind(model=m), make_ind(model=m)
     genome = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7])
 
-    child = Individual.from_parents(m, p1, p2, genome, generation=10)
+    child = Individual.from_parents(m, p1, p2, genome, birth_step=10)
 
     assert child.parent_ids == (p1.unique_id, p2.unique_id)
     assert child.genome_labels == p1.genome_labels
     np.testing.assert_array_equal(child.genome, genome)
-    assert child.generation == 10
+    assert child.birth_step == 10
+
+
+@pytest.mark.parametrize(
+    "genome, labels",
+    [
+        (np.array([0.1, 0.2]), LABELS),
+        (np.array([0.1] * N + [0.2]), LABELS),
+        (np.array([0.1] * (N - 1) + [float("nan")]), LABELS),
+        (np.array([0.1] * (N - 1) + [1.1]), LABELS),
+    ],
+)
+def test_init_rejects_invalid_genome(genome, labels):
+    with pytest.raises(ValueError):
+        Individual(StubModel(), genome, labels, parent_ids=None)

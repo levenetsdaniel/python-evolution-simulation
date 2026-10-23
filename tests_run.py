@@ -2,9 +2,9 @@
 Run all EvoSim test files.
 
 Usage:
-    python run_tests.py                # run all three files
-    python run_tests.py -k satiation   # filter by name (forwarded to pytest)
-    python run_tests.py -x              # stop on first failure
+    python tests_run.py                # run the full test suite
+    python tests_run.py -k satiation    # filter by name (forwarded to pytest)
+    python tests_run.py -x              # stop on first failure
 """
 
 import sys
@@ -15,6 +15,8 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.resolve()
 
 TEST_FILES = [
+    "tests/config_tests.py",
+    "tests/entrypoint_tests.py",
     "tests/fitness_tests.py",
     "tests/individual_tests.py",
     "tests/population_tests.py",
@@ -22,7 +24,14 @@ TEST_FILES = [
     "tests/training_buffer_tests.py",
     "tests/advisor_tests.py",
     "tests/trainer_tests.py",
-    "tests/mutation_tests.py"
+    "tests/mutation_tests.py",
+    "tests/spatial_tests.py",
+    "tests/spatial_visualization_tests.py",
+    "tests/spatial_guidance_tests.py",
+    "tests/spatial_observation_tests.py",
+    "tests/spatial_policy_tests.py",
+    "tests/cnn_policy_tests.py",
+    "tests/advisor_training_tests.py",
 ]
 
 

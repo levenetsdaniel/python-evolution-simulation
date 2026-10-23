@@ -1,0 +1,22 @@
+defaults:
+  - compare_schema
+  - environment@simulation.environment: default
+  - population@simulation.population: schema
+  - individual@simulation.individual: schema
+  - fitness@simulation.fitness: schema
+  - _self_
+
+advisor_path: artifacts/models/classic_advisor.cbm
+shift_strength: 0.7
+x_trait: heat_resistance
+y_trait: cold_resistance
+view: false
+
+hydra:
+  run:
+    dir: artifacts/hydra/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: artifacts/hydra/multirun/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

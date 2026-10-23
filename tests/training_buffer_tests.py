@@ -1,4 +1,4 @@
-"""Tests for core/training_buffer.py."""
+"""Tests for neural/training_buffer.py."""
 
 import json
 
@@ -8,10 +8,10 @@ import pytest
 
 from config.sim_config import EnvironmentConfig, PopulationConfig
 from core.enums import DeathCause
+from core.environment import Environment
 from core.individual import Individual
 from core.population import Population
-from core.environment import Environment
-from core.training_buffer import TrainingBuffer
+from neural.training_buffer import TrainingBuffer
 
 LABELS = PopulationConfig().genome_labels
 N = len(LABELS)
@@ -150,7 +150,7 @@ def test_buffer_receives_per_step_capacity_after_environment_consumed_food():
     class IntegrationModel(mesa.Model):
         def __init__(self):
             super().__init__(rng=0)
-            self.training_buffer = _RecordingBuffer()
+            self.recorder = _RecordingBuffer()
             self.births_this_step = 0
             self.deaths_this_step = {dc: 0 for dc in DeathCause}
 
@@ -172,6 +172,6 @@ def test_buffer_receives_per_step_capacity_after_environment_consumed_food():
         mutation_deltas=np.zeros(N),
     )
 
-    recorded = m.training_buffer.births[0]
+    recorded = m.recorder.births[0]
     assert recorded["env_params"]["food_availability"] == capacity
     assert recorded["env_delta"]["food_availability"] == 0.0

@@ -1,13 +1,23 @@
 from __future__ import annotations
 
-import mesa
-from config.sim_config import SimConfig
+from dataclasses import dataclass
 
-from .enums import DeathCause
+import mesa
+from config.sim_config import SimConfig, validate_sim_config
+
+from .enums import DeathCause, RunStatus
 from .environment import Environment
 from .mutation_patterns import MutationStrategy, BaselineMutation
 from .population import Population
-from .training_buffer import TrainingBuffer
+from .recording import EvolutionRecorder
+
+
+@dataclass(frozen=True)
+class SimulationResult:
+    """Summary of a completed or prematurely terminated simulation run."""
+
+    status: RunStatus
+    completed_steps: int
 
 
 class Model(mesa.Model):
@@ -17,7 +27,12 @@ class Model(mesa.Model):
     The model executes a step-based simulation loop and tracks key statistics.
     """
 
-    def __init__(self, config: SimConfig | None = None, mutation_strategy: MutationStrategy | None = None):
+    def __init__(
+        self,
+        config: SimConfig | None = None,
+        mutation_strategy: MutationStrategy | None = None,
+        recorder: EvolutionRecorder | None = None,
+    ):
         """
         Initialize the simulation model.
 
@@ -27,12 +42,13 @@ class Model(mesa.Model):
         Initializes:
             - Random number generator
             - Environment and population subsystems
-            - Training buffer for data collection
+            - Optional event recorder for external analytics / ML pipelines
             - Counters for births and deaths
             - DataCollector for tracking simulation metrics
         """
 
         self.config = config or SimConfig()
+        validate_sim_config(self.config)
         super().__init__(rng=self.config.seed)
         self.step_count = 0
 
@@ -41,21 +57,43 @@ class Model(mesa.Model):
         self.environment = Environment(self, config=self.config.environment)
 
         self.population = Population(self, config=self.config.population)
-
-        self.training_buffer = TrainingBuffer(self.config.environment)
+        self.recorder = recorder
 
         self.deaths_this_step = {DeathCause.AGE: 0, DeathCause.FITNESS: 0, DeathCause.THRESHOLD: 0,
                                  DeathCause.COMPETITION: 0}
         self.births_this_step = 0
+        self.attacks_this_step = {
+            "considered": 0,
+            "declined": 0,
+            "started": 0,
+            "lost": 0,
+            "won": 0,
+            "food_stolen": 0,
+            "energy_spent": 0.0,
+        }
+        agent_reporters = (
+            {
+                "Fitness": "fitness",
+                "Age": "age",
+                "Energy": "energy",
+            }
+            if self.config.collect_agent_data or self.config.individual_info
+            else {}
+        )
         self.datacollector = mesa.DataCollector(
             model_reporters={
                 "Step": lambda m: m.step_count,
-                "Generation": lambda m: m.population.generation,
+                "TimeStep": lambda m: m.population.time_step,
                 "PopulationSize": lambda m: m.population.actual_pop_size,
+                "FemaleCount": lambda m: m.population.count_females,
+                "MaleCount": lambda m: m.population.count_males,
+                "FoodCapacity": lambda m: m.environment.food_capacity,
+                "FoodAvailable": lambda m: m.environment.current_food,
 
                 "AvgFitness": lambda m: m.population.avg_fitness,
                 "AvgAge": lambda m: m.population.avg_age,
                 "AvgSatiation": lambda m: m.population.avg_satiation,
+                "AvgEnergy": lambda m: m.population.avg_energy,
                 "AvgHeatResistance": lambda m: m.population.avg_heat_resistance,
                 "AvgColdResistance": lambda m: m.population.avg_cold_resistance,
                 "AvgMetabolicRate": lambda m: m.population.avg_metabolic_rate,
@@ -71,15 +109,30 @@ class Model(mesa.Model):
                 "Deaths_threshold": lambda m: m.deaths_this_step[DeathCause.THRESHOLD],
                 "Deaths_competition": lambda m: m.deaths_this_step[DeathCause.COMPETITION],
                 "Deaths_total": lambda m: sum(m.deaths_this_step.values()),
+                "PopulationDelta": lambda m: m.births_this_step - sum(m.deaths_this_step.values()),
+
+                "AttacksConsidered": lambda m: m.attacks_this_step["considered"],
+                "AttacksDeclined": lambda m: m.attacks_this_step["declined"],
+                "AttacksStarted": lambda m: m.attacks_this_step["started"],
+                "AttacksLost": lambda m: m.attacks_this_step["lost"],
+                "AttacksWon": lambda m: m.attacks_this_step["won"],
+                "FoodStolen": lambda m: m.attacks_this_step["food_stolen"],
+                "AttackEnergySpent": lambda m: m.attacks_this_step["energy_spent"],
             },
 
-            agent_reporters={
-                "Fitness": "fitness",
-                "Age": "age",
-            }
+            agent_reporters=agent_reporters,
         )
 
         self.population.initialize()
+        self._collect_data()
+
+    def _collect_data(self) -> None:
+        """Collect all reporters from one consistent population snapshot."""
+        self.population.cache_metrics()
+        try:
+            self.datacollector.collect(self)
+        finally:
+            self.population.invalidate_metrics()
 
     def _display_info(self):
         print("step", self.step_count)
@@ -88,9 +141,13 @@ class Model(mesa.Model):
 
         print("HazardLevel", float(self.environment.current_params["hazard_level"]))
 
-        print("FoodCount", float(self.environment.current_params["food_availability"]))
+        print("FoodCapacity", float(self.environment.food_capacity))
+
+        print("FoodAvailable", float(self.environment.current_food))
 
         print("AvgFitness", float(self.datacollector.model_reporters["AvgFitness"](self)))
+
+        print("AvgEnergy", self.population.avg_energy)
 
         print("AvgHeatResistance", self.population.avg_heat_resistance)
 
@@ -114,16 +171,18 @@ class Model(mesa.Model):
         self.births_this_step = 0
         for key in self.deaths_this_step:
             self.deaths_this_step[key] = 0
+        for key in self.attacks_this_step:
+            self.attacks_this_step[key] = 0
 
         self.environment.step()
         self.population.step()
         self.step_count += 1
-        self.datacollector.collect(self)
+        self._collect_data()
 
         if self.config.debug:
             self._display_info()
 
-    def run(self, n_steps: int = 100):
+    def run(self, n_steps: int = 100) -> SimulationResult:
         """
         Run the simulation for a given number of steps.
 
@@ -135,30 +194,25 @@ class Model(mesa.Model):
             n_steps: Maximum number of steps to simulate.
         """
 
+        status = self._terminal_status()
+        if status is not None:
+            return SimulationResult(status=status, completed_steps=self.step_count)
+
         for _ in range(n_steps):
             self.step()
 
-            if len(self.agents) == 0:
-                print(f"Population extinct at step {self.step_count}")
-                break
+            status = self._terminal_status()
+            if status is not None:
+                return SimulationResult(status=status, completed_steps=self.step_count)
 
-            if self.population.count_females == 0:
-                print(f"Population extinct at step {self.step_count}, all males died")
-                break
+        return SimulationResult(status=RunStatus.COMPLETED, completed_steps=self.step_count)
 
-            if self.population.count_males == 0:
-                print(f"Population extinct at step {self.step_count}, all females died")
-                break
-
-            if self.config.debug:
-                self._display_info()
-
-            if self.config.record:
-                self.training_buffer.save(self.config.output_path)
-                try:
-                    x, y, weights = self.training_buffer.to_numpy()
-                except ValueError:
-                    x = y = weights = None
-
-                if self.config.debug and x is not None and y is not None:
-                    print(f"Training data: x={x.shape}, y={y.shape}")
+    def _terminal_status(self) -> RunStatus | None:
+        metrics = self.population.metrics()
+        if metrics.population_size == 0:
+            return RunStatus.EXTINCT
+        if metrics.female_count == 0:
+            return RunStatus.NO_FEMALES
+        if metrics.male_count == 0:
+            return RunStatus.NO_MALES
+        return None

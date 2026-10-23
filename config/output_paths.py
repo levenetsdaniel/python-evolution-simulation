@@ -1,0 +1,11 @@
+from pathlib import Path
+
+
+ARTIFACTS_ROOT = Path("artifacts")
+
+PLOTS_ROOT = ARTIFACTS_ROOT / "plots"
+SIMULATION_PLOTS_DIR = PLOTS_ROOT / "simulation"
+VIS_DEMO_PLOTS_DIR = PLOTS_ROOT / "demo"
+
+DASHBOARDS_ROOT = ARTIFACTS_ROOT / "dashboards"
+COMPARISON_DASHBOARD_DIR = DASHBOARDS_ROOT / "comparison"

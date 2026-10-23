@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from core.training_buffer import TrainingBuffer
 from neural.trainer import train_advisor
+from neural.training_buffer import TrainingBuffer
 
 
 N_GENES = 7

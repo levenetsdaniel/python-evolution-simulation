@@ -1,5 +1,6 @@
 import pandas as pd
 
+from core.enums import DeathCause
 from core.model import Model
 
 
@@ -14,45 +15,67 @@ def is_extinct(model: Model) -> bool:
     return False
 
 
-def collect_history_row(model: Model, env_before: dict) -> dict:
-    """Collect one history row after a step using environment values from step start."""
+def collect_history_row(model: Model) -> dict:
+    """Collect one history row from the environment and population after a step."""
     pop = model.population
+    metrics = pop.cache_metrics()
 
-    return {
-        "Generation": pop.generation,
-        "PopulationSize": float(pop.actual_pop_size),
-        "AvgFitness": float(pop.avg_fitness),
-        "AvgAge": float(pop.avg_age),
-        "AvgSatiation": float(pop.avg_satiation),
-        "AvgHeatResistance": float(pop.avg_heat_resistance),
-        "AvgColdResistance": float(pop.avg_cold_resistance),
-        "AvgMetabolicRate": float(pop.avg_metabolic_rate),
-        "AvgResilience": float(pop.avg_resilience),
-        "AvgSize": float(pop.avg_size),
-        "AvgSpeed": float(pop.avg_speed),
-        "AvgAggressiveness": float(pop.avg_aggressiveness),
-        "TemperatureStart": float(env_before["temperature"]),
-        "FoodStart": float(env_before["food_availability"]),
-        "HazardStart": float(env_before["hazard_level"]),
-    }
+    try:
+        return {
+            "TimeStep": model.step_count,
+            "PopulationSize": float(metrics.population_size),
+            "FemaleCount": float(metrics.female_count),
+            "MaleCount": float(metrics.male_count),
+            "AvgFitness": float(metrics.avg_fitness),
+            "AvgAge": float(metrics.avg_age),
+            "AvgSatiation": float(metrics.avg_satiation),
+            "AvgEnergy": float(metrics.avg_energy),
+            "AvgHeatResistance": float(metrics.avg_heat_resistance),
+            "AvgColdResistance": float(metrics.avg_cold_resistance),
+            "AvgMetabolicRate": float(metrics.avg_metabolic_rate),
+            "AvgResilience": float(metrics.avg_resilience),
+            "AvgSize": float(metrics.avg_size),
+            "AvgSpeed": float(metrics.avg_speed),
+            "AvgAggressiveness": float(metrics.avg_aggressiveness),
+            "Temperature": float(model.environment.current_params["temperature"]),
+            "FoodCapacity": float(model.environment.food_capacity),
+            "FoodAvailable": float(model.environment.current_food),
+            "HazardLevel": float(model.environment.current_params["hazard_level"]),
+            "BirthCount": float(model.births_this_step),
+            "Deaths_age": float(model.deaths_this_step[DeathCause.AGE]),
+            "Deaths_fitness": float(model.deaths_this_step[DeathCause.FITNESS]),
+            "Deaths_threshold": float(model.deaths_this_step[DeathCause.THRESHOLD]),
+            "Deaths_competition": float(model.deaths_this_step[DeathCause.COMPETITION]),
+            "Deaths_total": float(sum(model.deaths_this_step.values())),
+            "PopulationDelta": float(model.births_this_step - sum(model.deaths_this_step.values())),
+            "AttacksConsidered": float(model.attacks_this_step["considered"],),
+            "AttacksDeclined": float(model.attacks_this_step["declined"]),
+            "AttacksStarted": float(model.attacks_this_step["started"]),
+            "AttacksLost": float(model.attacks_this_step["lost"]),
+            "AttacksWon": float(model.attacks_this_step["won"]),
+            "FoodStolen": float(model.attacks_this_step["food_stolen"]),
+            "AttackEnergySpent": float(model.attacks_this_step["energy_spent"]),
+        }
+    finally:
+        pop.invalidate_metrics()
 
 
 def collect_history(model: Model, n_steps: int) -> pd.DataFrame:
     """
     Run the model step by step and collect population means plus environment values.
 
-    Population metrics are taken after each completed step, while environment
-    metrics are recorded from the beginning of that step.
+    Population and environment metrics are both taken after each completed step.
     """
-    rows: list[dict] = []
+    rows = [collect_history_row(model)]
+
+    if is_extinct(model):
+        return pd.DataFrame(rows)
 
     for _ in range(n_steps):
-        env_before = model.environment.current_params.copy()
-
         model.step()
-        rows.append(collect_history_row(model, env_before))
+        rows.append(collect_history_row(model))
 
-        if _is_extinct(model):
+        if is_extinct(model):
             break
 
     return pd.DataFrame(rows)

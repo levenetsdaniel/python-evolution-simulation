@@ -1,12 +1,9 @@
-"""
-Presets of initial conditions and climate dynamics.
+"""Shared climate and food presets for classic and spatial simulations.
 
-Using:
-    from config.scenarios import warming
-    config = warming()                                # default
-    config = warming(SimConfig(seed=7, n_steps=800))  # with custom parameters
-
-    config = SCENARIOS["harsh_seasons"]()
+Choose with ``environment=famine`` in Hydra, or pass
+``SCENARIOS["famine"]`` as the world's environment configuration.
+Spatial sources scale their capacity/initial stock by food availability
+relative to EnvironmentConfig defaults, and regeneration by the preset rate.
 """
 
 from .sim_config import EnvironmentConfig
@@ -15,6 +12,7 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     "default": EnvironmentConfig(),
     "stable": EnvironmentConfig(
         food_availability=10000.0,
+        food_regeneration_rate=1.0,
         temp_start=20.0,
         temp_step=0.0,
         hazard_level_start=0.1,
@@ -22,6 +20,7 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     ),
     "warming": EnvironmentConfig(
         food_availability=10000.0,
+        food_regeneration_rate=0.85,
         temp_start=-15.0,
         temp_step=0.1,
         hazard_level_start=0.1,
@@ -29,7 +28,7 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     ),
     "ice_age": EnvironmentConfig(
         food_availability=7000.0,
-        food_step=-10.0,
+        food_regeneration_rate=0.45,
         temp_start=30.0,
         temp_step=-0.08,
         hazard_level_start=0.1,
@@ -37,15 +36,15 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     ),
     "harsh_seasons": EnvironmentConfig(
         food_availability=10000.0,
+        food_regeneration_rate=0.65,
         temp_start=20.0,
         temp_step=0.4,
-        temp_reset=-10.0,
         hazard_level_start=0.1,
         hazard_step=0.001,
     ),
     "famine": EnvironmentConfig(
         food_availability=2500.0,
-        food_step=-5.0,
+        food_regeneration_rate=0.15,
         temp_start=20.0,
         temp_step=0.05,
         hazard_level_start=0.1,
@@ -53,6 +52,7 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     ),
     "hazardous": EnvironmentConfig(
         food_availability=10000.0,
+        food_regeneration_rate=0.85,
         temp_start=20.0,
         temp_step=0.05,
         hazard_level_start=0.2,
@@ -60,9 +60,9 @@ SCENARIOS: dict[str, EnvironmentConfig] = {
     ),
     "chaos": EnvironmentConfig(
         food_availability=4000.0,
+        food_regeneration_rate=0.3,
         temp_start=10.0,
         temp_step=0.3,
-        temp_reset=-15.0,
         hazard_level_start=0.2,
         hazard_step=0.003,
     ),

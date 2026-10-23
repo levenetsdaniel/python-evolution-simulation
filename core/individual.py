@@ -17,7 +17,7 @@ class Individual(mesa.Agent):
     """
 
     def __init__(self, model: mesa.Model, genome: np.ndarray, genome_labels: list[str], parent_ids: tuple | None,
-                 generation: int = 0, age: int = 0):
+                 birth_step: int = 0, age: int = 0):
         """
         Initialize an individual agent.
 
@@ -26,7 +26,7 @@ class Individual(mesa.Agent):
             genome: Array of gene values (0–1 range).
             genome_labels: Names corresponding to genome entries.
             parent_ids: Tuple of parent IDs, or None if randomly initialized.
-            generation: Generation index of the individual.
+            birth_step: Simulation step at which the individual was born.
             age: Initial age.
 
         Initializes:
@@ -39,11 +39,21 @@ class Individual(mesa.Agent):
 
         super().__init__(model)
         model_config = getattr(self.model, "config", None)
-        self.config = getattr(model_config, "individual", None) or DEFAULT_INDIVIDUAL_CONFIG
+        self.config = (getattr(self.model, "individual_config", None)
+                       or getattr(model_config, "individual", None)
+                       or DEFAULT_INDIVIDUAL_CONFIG)
+        self._fitness_config = (getattr(self.model, "fitness_config", None)
+                                or getattr(model_config, "fitness", None))
+        self._environment_config = (getattr(self.model, "environment_config", None)
+                                    or getattr(model_config, "environment", None))
         self.genome = np.array(genome, dtype=float)
         self.genome_labels = genome_labels
+        if self.genome.ndim != 1 or len(self.genome) != len(self.genome_labels):
+            raise ValueError("genome must be one-dimensional and match genome_labels")
+        if not np.isfinite(self.genome).all() or not ((0.0 <= self.genome) & (self.genome <= 1.0)).all():
+            raise ValueError("genome values must be finite and within [0, 1]")
         self.parent_ids = parent_ids
-        self.generation = generation
+        self.birth_step = birth_step
         self.genes_map = dict(zip(self.genome_labels, self.genome))
         self.gender = self.model.rng.choice(list(Gender))
         self.death_cause = None
@@ -54,6 +64,7 @@ class Individual(mesa.Agent):
                                            self.genes_map["resilience"] * self.config.food_need_resilience_coef +
                                            self.genes_map["speed"] * self.config.food_need_speed_coef +
                                            self.genes_map["aggressiveness"] * self.config.food_need_aggr_coef) * 10)))
+        self.energy = self.config.energy_initial
         self.fitness = None
         self.is_alive = True
 
@@ -72,14 +83,55 @@ class Individual(mesa.Agent):
 
     @property
     def satiation(self) -> float:
-        """
-        Compute current satiation level.
+        """Return the normalized energy reserve used for survival and reproduction."""
 
-        Returns:
-        Ratio of consumed food to required food.
-        """
+        return self.energy / self.config.energy_capacity
 
-        return self.food_eaten / self.food_need
+    @property
+    def food_satiation(self) -> float:
+        """Return the fraction of this step's food requirement that was met."""
+
+        return min(1.0, self.food_eaten / self.food_need)
+
+    def spend_energy(self, amount: float) -> None:
+        """Spend energy without letting the reserve become negative."""
+        self.energy = max(0.0, self.energy - amount)
+
+    def gain_energy(self, amount: float) -> None:
+        """Add energy without exceeding the individual's configured capacity."""
+        self.energy = min(self.config.energy_capacity, self.energy + amount)
+
+    def eat(self, amount: float, energy_per_unit: float) -> None:
+        """Record food intake and convert it to energy using this mode's units."""
+        self.record_food(amount)
+        self.gain_energy(amount * energy_per_unit)
+
+    def record_food(self, amount: float) -> None:
+        """Record food before energy conversion or competition transfers it."""
+        self.food_eaten += amount
+
+    def can_reproduce(self, min_age: int, min_energy: float) -> bool:
+        return self.is_alive and self.age >= min_age and self.energy >= min_energy
+
+    def reproduction_probability(self, rate: float) -> float:
+        return float(np.clip(rate * self.satiation, 0.0, 1.0))
+
+    def metabolic_cost(self) -> float:
+        """Return the shared per-step cost of living for this genome."""
+        return float(
+            self.config.basal_energy_cost
+            + self["speed"] * self.config.speed_energy_cost
+            + self["aggressiveness"] * self.config.aggressiveness_energy_cost
+        )
+
+    def age_death_probability(self) -> float:
+        """Return age-related mortality after this step's age increment."""
+        return (1 - np.exp(-self.age / self.config.age_scale)) ** self.config.age_death_power
+
+    def _update_energy(self) -> None:
+        """Convert consumed food into energy and pay this step's metabolic costs."""
+        self.gain_energy(self.food_eaten * self.config.food_energy_conversion)
+        self.spend_energy(self.metabolic_cost())
 
     def compute_fitness(self) -> float:
         """
@@ -89,16 +141,16 @@ class Individual(mesa.Agent):
             Fitness score in range [score_floor, 1.0].
         """
 
-        ind_params = self.genes_map.copy()
-        ind_params["satiation"] = self.satiation
-        model_config = getattr(self.model, "config", None)
-        fitness_config = getattr(model_config, "fitness", None)
-        environment_config = getattr(model_config, "environment", None)
+        state = getattr(self, "state", None)
+        environment = self.model.environment
+        conditions = (environment.conditions_at(state.x, state.y) if state is not None
+                      else environment.current_params)
         return fitness(
-            ind_params,
-            self.model.environment.current_params,
-            fitness_config=fitness_config,
-            environment_config=environment_config,
+            self.genes_map,
+            conditions,
+            fitness_config=self._fitness_config,
+            environment_config=self._environment_config,
+            satiation=self.satiation,
         )
 
     def step(self):
@@ -108,15 +160,25 @@ class Individual(mesa.Agent):
         Checks if the agent is dead.
         """
 
+        if not self.is_alive:
+            return
+
+        self._update_energy()
         self.fitness = self.compute_fitness()
-        self.model.training_buffer.record_fitness(self.unique_id, self.fitness)
+        self.apply_fitness_outcome()
+
+    def apply_fitness_outcome(self) -> None:
+        """Record an assigned fitness value and apply its survival consequences."""
+        recorder = getattr(self.model, "recorder", None)
+        if recorder is not None:
+            recorder.record_fitness(self.unique_id, self.fitness)
         if self.fitness < self.config.fitness_death_threshold:
             self.is_alive = False
             self.death_cause = DeathCause.THRESHOLD
             return
 
         self.age += 1
-        age_death_prob = (1 - np.exp(-self.age / self.config.age_scale)) ** self.config.age_death_power
+        age_death_prob = self.age_death_probability()
         fitness_death_prob = (1 - self.fitness) * self.config.fitness_death_prob_coef
         death_prob = 1 - (1 - age_death_prob) * (1 - fitness_death_prob)
 
@@ -126,7 +188,7 @@ class Individual(mesa.Agent):
             return
 
     @classmethod
-    def random_init(cls, model: mesa.Model, genome_labels: list[str], generation: int = 0,
+    def random_init(cls, model: mesa.Model, genome_labels: list[str], birth_step: int = 0,
                     age: int = 2) -> "Individual":
         """
         Create a randomly initialized individual.
@@ -134,7 +196,7 @@ class Individual(mesa.Agent):
         Args:
             model: Simulation model.
             genome_labels: Names of genome traits.
-            generation: Initial generation.
+            birth_step: Initial simulation step.
             age: Initial age.
 
         Returns:
@@ -148,13 +210,13 @@ class Individual(mesa.Agent):
             genome=genome,
             parent_ids=None,
             genome_labels=genome_labels,
-            generation=generation,
+            birth_step=birth_step,
             age=age
         )
 
     @classmethod
     def from_parents(cls, model: mesa.Model, p1: "Individual", p2: "Individual", genome: np.ndarray,
-                     generation: int = 0) -> "Individual":
+                     birth_step: int = 0) -> "Individual":
         """
         Create an individual from two parents.
 
@@ -163,7 +225,7 @@ class Individual(mesa.Agent):
             p1: First parent.
             p2: Second parent.
             genome: Resulting genome after recombination and mutation.
-            generation: Generation index.
+            birth_step: Birth simulation step.
 
         Returns:
             New Individual with inherited parent IDs.
@@ -173,6 +235,6 @@ class Individual(mesa.Agent):
             model=model,
             genome=genome,
             genome_labels=p1.genome_labels,
-            generation=generation,
+            birth_step=birth_step,
             parent_ids=(p1.unique_id, p2.unique_id),
         )

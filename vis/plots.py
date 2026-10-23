@@ -5,12 +5,14 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 
+from config.output_paths import SIMULATION_PLOTS_DIR
+
 def _build_group_figure(
     history_df: pd.DataFrame,
     title: str,
     left_cols: list[str],
     right_cols: list[str] | None = None,
-    x_col: str = "Generation",
+    x_col: str = "TimeStep",
     left_axis_title: str = "Population traits",
     right_axis_title: str = "Environment",
 ) -> go.Figure:
@@ -59,11 +61,58 @@ def _build_group_figure(
         height=550,
     )
 
-    fig.update_xaxes(title_text="Generation")
+    fig.update_xaxes(title_text="Simulation step")
     fig.update_yaxes(title_text=left_axis_title, secondary_y=False)
 
     if use_secondary:
         fig.update_yaxes(title_text=right_axis_title, secondary_y=True)
+
+    return fig
+
+
+def _build_stacked_bar(
+    history_df: pd.DataFrame,
+    title: str,
+    columns: list[str],
+    y_axis_title: str,
+) -> go.Figure:
+    """Build a stacked event-count bar chart."""
+    required = {"TimeStep", *columns}
+    missing = required - set(history_df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns: {sorted(missing)}")
+
+    fig = go.Figure()
+    for column in columns:
+        fig.add_trace(
+            go.Bar(
+                x=history_df["TimeStep"],
+                y=history_df[column],
+                name=column,
+            )
+        )
+
+    fig.update_layout(
+        title=title,
+        template="plotly_white",
+        barmode="stack",
+        hovermode="x unified",
+        height=550,
+        xaxis_title="Simulation step",
+        yaxis_title=y_axis_title,
+    )
+
+    if history_df[columns].to_numpy().sum() == 0:
+        fig.add_annotation(
+            text="No deaths recorded for this run",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font={"size": 16},
+        )
+        fig.update_yaxes(range=[0, 1])
 
     return fig
 
@@ -78,7 +127,7 @@ def build_all_figures(history_df: pd.DataFrame) -> dict[str, go.Figure]:
             history_df=history_df,
             title="Thermal Adaptation",
             left_cols=["AvgHeatResistance", "AvgColdResistance"],
-            right_cols=["TemperatureStart"],
+            right_cols=["Temperature"],
             left_axis_title="Resistance",
             right_axis_title="Temperature (°C)",
         ),
@@ -86,15 +135,23 @@ def build_all_figures(history_df: pd.DataFrame) -> dict[str, go.Figure]:
             history_df=history_df,
             title="Body Traits vs Food",
             left_cols=["AvgSize", "AvgSpeed", "AvgAggressiveness", "AvgResilience", "AvgMetabolicRate"],
-            right_cols=["FoodStart"],
+            right_cols=["FoodCapacity", "FoodAvailable"],
             left_axis_title="Trait value",
+            right_axis_title="Food",
+        ),
+        "energy_food": _build_group_figure(
+            history_df=history_df,
+            title="Energy Reserve vs Food",
+            left_cols=["AvgEnergy"],
+            right_cols=["FoodCapacity", "FoodAvailable"],
+            left_axis_title="Average energy",
             right_axis_title="Food",
         ),
         "resilience_hazard": _build_group_figure(
             history_df=history_df,
             title="Resilience vs Hazard",
             left_cols=["AvgResilience"],
-            right_cols=["HazardStart"],
+            right_cols=["HazardLevel"],
             left_axis_title="Resilience",
             right_axis_title="Hazard",
         ),
@@ -106,10 +163,39 @@ def build_all_figures(history_df: pd.DataFrame) -> dict[str, go.Figure]:
             left_axis_title="Fitness",
             right_axis_title="Population size",
         ),
+        "demography": _build_group_figure(
+            history_df=history_df,
+            title="Population by Sex",
+            left_cols=["PopulationSize", "FemaleCount", "MaleCount"],
+            left_axis_title="Individuals",
+        ),
+        "death_causes": _build_stacked_bar(
+            history_df=history_df,
+            title="Deaths by Cause",
+            columns=["Deaths_age", "Deaths_fitness", "Deaths_threshold", "Deaths_competition"],
+            y_axis_title="Deaths",
+        ),
+        "population_flow": _build_group_figure(
+            history_df=history_df,
+            title="Births, Deaths, and Population Change",
+            left_cols=["BirthCount", "Deaths_total", "PopulationDelta"],
+            left_axis_title="Individuals per simulation step",
+        ),
+        "attack_decisions": _build_group_figure(
+            history_df=history_df,
+            title="Attack Decisions and Outcomes",
+            left_cols=["AttacksConsidered", "AttacksDeclined", "AttacksStarted", "AttacksLost", "AttacksWon"],
+            right_cols=["FoodStolen", "AttackEnergySpent"],
+            left_axis_title="Attack events",
+            right_axis_title="Food and energy",
+        ),
     }
     return figures
 
-def save_figures(figures: dict[str, go.Figure], output_dir: str | Path = "artifacts") -> None:
+def save_figures(
+    figures: dict[str, go.Figure],
+    output_dir: str | Path = SIMULATION_PLOTS_DIR,
+) -> None:
     """Save all figures as separate HTML files."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -137,7 +223,7 @@ def build_animated_scatter(
     frames = []
 
     for i in range(n_gens):
-        generation = str(i + 1)
+        time_step = str(i + 1)
 
         frames.append(
             go.Frame(
@@ -157,7 +243,7 @@ def build_animated_scatter(
                         "Reds",
                     ),
                 ],
-                name=generation,
+                name=time_step,
             )
         )
 
@@ -283,8 +369,8 @@ def _adaptation_speed(history) -> float:
     if len(fitness) < 2:
         return 0.0
 
-    if "Generation" in history:
-        x = history.loc[fitness.index, "Generation"].to_numpy(dtype=float)
+    if "TimeStep" in history:
+        x = history.loc[fitness.index, "TimeStep"].to_numpy(dtype=float)
     else:
         x = np.arange(len(fitness), dtype=float)
 
@@ -372,14 +458,14 @@ def _play_pause() -> dict:
 
 
 def _gen_slider(frames: list) -> dict:
-    """Build a Plotly generation slider for animation frames."""
+    """Build a Plotly simulation-step slider for animation frames."""
     return {
         "active": 0,
         "x": 0.1,
         "y": 0,
         "len": 0.85,
         "currentvalue": {
-            "prefix": "Поколение: ",
+            "prefix": "Шаг: ",
             "visible": True,
             "xanchor": "right",
         },

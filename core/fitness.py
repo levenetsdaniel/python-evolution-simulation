@@ -5,6 +5,77 @@ DEFAULT_FITNESS_CONFIG = FitnessConfig()
 DEFAULT_ENV_CONFIG = EnvironmentConfig()
 
 
+def batch_fitness(
+    genomes: np.ndarray,
+    satiation: np.ndarray,
+    env_params: dict[str, float],
+    fitness_config: FitnessConfig | None = None,
+    environment_config: EnvironmentConfig | None = None,
+    trait_indices: dict[str, int] | None = None,
+) -> np.ndarray:
+    """Calculate fitness for a matrix of genomes in one NumPy batch."""
+    fitness_config = fitness_config or DEFAULT_FITNESS_CONFIG
+    environment_config = environment_config or DEFAULT_ENV_CONFIG
+    trait_indices = trait_indices or {
+        "heat_resistance": 0,
+        "cold_resistance": 1,
+        "metabolic_rate": 2,
+        "resilience": 3,
+        "size": 4,
+        "speed": 5,
+        "aggressiveness": 6,
+    }
+
+    heat = genomes[:, trait_indices["heat_resistance"]]
+    cold = genomes[:, trait_indices["cold_resistance"]]
+    metabolic = genomes[:, trait_indices["metabolic_rate"]]
+    resilience = genomes[:, trait_indices["resilience"]]
+    size = genomes[:, trait_indices["size"]]
+    speed = genomes[:, trait_indices["speed"]]
+    aggression = genomes[:, trait_indices["aggressiveness"]]
+
+    temp_norm = (
+        (env_params["temperature"] - environment_config.min_temperature)
+        / (environment_config.max_temperature - environment_config.min_temperature)
+    )
+    delta = temp_norm - fitness_config.temp_20_norm
+    adaptation = heat if delta >= 0 else cold
+    temp_score = np.clip(
+        np.exp(-(np.abs(delta) * (1.0 - adaptation)) ** 2 / fitness_config.temp_score_sharpness),
+        fitness_config.score_floor,
+        1.0,
+    )
+
+    efficiency = (
+        1.0
+        - metabolic * fitness_config.metabolic_rate_efficiency_penalty
+        - resilience * fitness_config.resilience_efficiency_penalty
+    )
+    energy_score = np.clip(
+        satiation * efficiency
+        - np.maximum(0.0, aggression - metabolic) * fitness_config.aggression_metabolic_penalty,
+        fitness_config.score_floor,
+        1.0,
+    )
+
+    hazard_score = np.clip(
+        np.exp(-(env_params["hazard_level"] * (1.0 - resilience)) ** 2),
+        fitness_config.score_floor,
+        1.0,
+    )
+    proportion_score = np.clip(
+        1.0
+        - (
+            np.maximum(0.0, speed - fitness_config.speed_metabolic_ratio * metabolic)
+            + np.maximum(0.0, size - fitness_config.size_metabolic_ratio * metabolic)
+        )
+        * fitness_config.proportion_penalty,
+        fitness_config.score_floor,
+        1.0,
+    )
+    return temp_score * energy_score * hazard_score * proportion_score
+
+
 def _temp_score(
     heat_res: float,
     cold_res: float,
@@ -132,6 +203,8 @@ def fitness(
     env_params: dict[str, float],
     fitness_config: FitnessConfig | None = None,
     environment_config: EnvironmentConfig | None = None,
+    *,
+    satiation: float | None = None,
 ) -> float:
     """
     Calculates the fitness given an individual's and environment's parameters
@@ -163,7 +236,7 @@ def fitness(
     )
 
     energy_score = _energy_score(
-        ind_params["satiation"],
+        ind_params["satiation"] if satiation is None else satiation,
         ind_params["resilience"],
         ind_params["metabolic_rate"],
         ind_params["aggressiveness"],

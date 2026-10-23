@@ -1,360 +1,183 @@
-# Agent-based population evolution simulator with neural network guidance
+# EvoSim
 
-Симуляция эволюции популяции в изменяющейся среде. Каждая особь описывается вектором признаков (температурная устойчивость, скорость, размер и др.). Функция приспособленности определяет выживаемость в текущих условиях среды.
+Агентная симуляция эволюции популяции на Python и Mesa. Организмы наследуют семь признаков, расходуют энергию, конкурируют за пищу, размножаются и адаптируются к изменяющейся среде.
 
-Популяция клонируется на две параллельные ветви. Одна эволюционирует по классическому генетическому алгоритму (baseline), другая получает вектор направления мутаций от обученного `CatBoost`-советчика (neural-guided). По итогу каждого поколения сравниваются численность, средний fitness и скорость адаптации.
+Поддерживаются два режима: **spatial** — непрерывный двумерный мир с локальными источниками пищи; **classic** — популяционная модель без пространственного перемещения. Режим по умолчанию — `spatial`.
 
----
+## Содержание
 
-## Команда
+- [Установка](#установка)
+- [Быстрый старт](#быстрый-старт)
+- [Конфигурация и сценарии](#конфигурация-и-сценарии)
+- [Машинное обучение](#машинное-обучение)
+- [Тесты](#тесты)
+- [Структура проекта](#структура-проекта)
 
-| Участник | Уникальная библиотека | Направление |
-|---|---|---|
-| Левенец Даниэль | `mesa` | Ядро симуляции, генетический алгоритм, тесты, профилирование |
-| Шевченко Никита | `catboost` | Нейросоветчик (CatBoost), визуализация |
+## Установка
 
----
+Для локального окружения используется Python **3.13**.
 
-## Архитектура
-
-```
-evosim/
-├── core/
-│   ├── engine.py            # Engine: предобучение советчика + параллельные ветви
-│   ├── model.py             # Mesa-модель, главный цикл, DataCollector
-│   ├── population.py        # популяция: инициализация, отбор, размножение, конкуренция
-│   ├── individual.py        # агент-особь: геном, возраст, смертность
-│   ├── environment.py       # среда: температура, пища, распределение ресурса
-│   ├── fitness.py           # функции фитнеса (temp / energy / hazard / proportion)
-│   ├── mutation_patterns.py # стратегии мутации: BaselineMutation, NeuralMutation
-│   ├── training_buffer.py   # сбор (x, y, weights) для обучения советчика
-│   └── enums.py             # DeathCause, Gender
-├── neural/
-│   ├── advisor.py           # CatBoostAdvisor: обёртка над CatBoostRegressor
-│   ├── trainer.py           # обучение советчика на буфере baseline
-│   └── mutation.py          # neural_mutate: сдвиг генома к предсказанному вектору
-├── vis/
-│   ├── history.py           # пошаговый сбор истории → DataFrame
-│   ├── plots.py             # Plotly-графики и компоненты дашборда
-│   ├── snapshots.py         # per-step снимки геномов для анимации
-│   ├── dashboard.py         # сборка сравнительного HTML-дашборда baseline vs neural
-│   └── vis_demo.py          # демо базовой визуализации (одиночный прогон)
-├── profiling/
-│   ├── profiler.py          # cProfile + сохранение артефактов
-│   ├── stats.py             # фильтрация project-only функций, текстовая сводка
-│   ├── report.py            # рендер HTML-отчёта
-│   └── report_template.html
-├── tests/                   # pytest: fitness / individual / population / environment /
-│                            # training_buffer / advisor / trainer / mutation
-├── reports/                 # артефакты профилирования
-├── config/
-│   ├── sim_config.py        # dataclass-схемы (Sim / Environment / Population / Individual / Fitness / Profiler)
-│   ├── scenarios.py         # пресеты EnvironmentConfig
-│   ├── registry.py          # регистрация схем и сценариев в Hydra ConfigStore
-│   ├── sim_config.yaml      # дефолты для main.py / synthetic_run.py
-│   └── profile_config.yaml  # дефолты для profile_run.py
-├── main.py                  # baseline + neural-guided через Engine
-├── synthetic_run.py         # одиночный Model: печать статистики, сбор обучающих примеров
-├── profile_run.py           # точка входа профайлера
-├── tests_run.py             # запуск всего тестового набора
-├── requirements.txt
-└── README.md
-```
-
----
-
-### Итерация 1
-
-**Левенец**
-- **1.1** Эволюционный движок через `mesa`
-- **1.2** Функция приспособленности — `fitness(individual, environment)`. Определяет рождаемость и смертность.
-- **1.3** CLI — параметры среды, число поколений
-
-**Шевченко**
-- **1.4** Cоветчик (CatBoost) — сеть предсказывает оптимальный вектор признаков. Обучается на данных первых поколений baseline
-- **1.5** Интеграция советчика — `neural_mutate()` сдвигает признаки к целевому вектору вместо случайного шума
-- **1.6** Базовая визуализация Plotly — графики численности, среднего fitness и средних признаков на одном полотне
-
----
-
-### Итерация 2
-
-**Левенец**
-- **2.1** Тесты (pytest) — покрытие `fitness`, `individual`, `population`, `environment`, `training_buffer`
-- **2.2** Отчёт по профилированию — `cProfile` на эволюционном цикле, HTML- и текстовая сводки
-- **2.3** Расширенные сценарии среды
-- **2.4** Параллельные ветви — `Engine` клонирует конфигурацию на baseline и neural-guided, единый интерфейс истории обеих ветвей
-
-**Шевченко**
-- **2.4** Переобучение модели каждые K поколений — советчик обновляется на свежей истории и адаптируется к изменению среды, а не только к начальным условиям
-- **2.5** Сравнительный дашборд Plotly — анимация по поколениям: точки особей в пространстве признаков
-- **2.6** Итоговая таблица baseline vs neural — численность, средний fitness, скорость адаптации
-
----
-
-## Сборка
+Из корня проекта:
 
 ```bash
-git clone https://github.com/levenetsdaniel/python-evolution-simulation
-cd evosim
-
-python3 -m venv .venv
+python3.13 -m venv .venv
 source .venv/bin/activate
-
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-### Точки входа
+Основные библиотеки: Mesa, NumPy, pandas, SciPy, Hydra/OmegaConf, Plotly, CatBoost и PyTorch. PyTorch нужен для CNN; полный `requirements.txt` устанавливает его вместе с остальными зависимостями. Lock-файл пока отсутствует.
 
-| Скрипт | Что делает |
-|---|---|
-| `python3 main.py` | Полный прогон `Engine`: предобучает советчика на baseline-буфере и запускает обе ветви (baseline + neural-guided) синхронно. С `view=true` вместо прогона собирает сравнительный дашборд (см. ниже). |
-| `python3 synthetic_run.py` | Одиночный прогон `Model` (только baseline-мутации) с возможностью печати статистики и сохранения обучающего буфера |
-| `python3 profile_run.py` | Прогон симуляции под `cProfile` |
-| `python3 vis/vis_demo.py` | Сохраняет базовый набор Plotly-графиков по одиночному прогону |
-| `python3 vis/dashboard.py` | Прямой сбор дашборда с дефолтным `SimConfig` (без CLI-override) |
-| `python3 tests_run.py` | Запуск всего тестового набора |
+## Быстрый старт
 
----
-
-## Конфигурация
-
-Все параметры описаны как dataclass-схемы в `config/sim_config.py` и зарегистрированы в Hydra ConfigStore (`config/registry.py`). Дефолтные значения берутся из dataclass; YAML-файлы (`config/sim_config.yaml`, `config/profile_config.yaml`) задают стартовый профиль; всё остальное переопределяется из CLI в стиле Hydra:
+Обычная симуляция без обучения и готовых моделей:
 
 ```bash
-python3 main.py n_steps=200 seed=7
-python3 main.py population.initial_size=300 environment.temp_start=10
-python3 main.py environment=warming        # выбор сценария (см. ниже)
-python3 main.py --help                     # полный список параметров
+python main.py n_steps=300 seed=42
 ```
 
-### `SimConfig` (корень)
-
-| Ключ | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `n_steps` | int | `600` | Число шагов симуляции |
-| `retrain_steps` | int | `50` | Период переобучения советчика (только `Engine`) |
-| `seed` | int | `42` | Сид генератора случайных чисел |
-| `shift_strength` | float | `0.7` | Сила сдвига генома к предсказанию советчика в `NeuralMutation` |
-| `output_path` | str | `data/training_samples.json` | Путь для сохранения обучающего буфера (`synthetic_run.py` при `record=true`) |
-| `record` | bool | `false` | Записывать буфер обучающих примеров на диск |
-| `view` | bool | `false` | В `main.py` — собрать и сохранить дашборд вместо обычного прогона `Engine`. В `profile_run.py` — автоматически открыть HTML-отчёт по профилированию. |
-| `x_trait` | str | `heat_resistance` | Ось X для animated scatter в дашборде (любое имя из `population.genome_labels`) |
-| `y_trait` | str | `cold_resistance` | Ось Y для animated scatter в дашборде |
-| `debug` | bool | `false` | Печатать подробную статистику по каждому шагу |
-| `model_info` | bool | `false` | Сводка по модели (`synthetic_run.py`) |
-| `steps_info` | int | `5` | Сколько последних шагов показать в `model_info` |
-| `population_info` | bool | `false` | Сводка по популяции (`synthetic_run.py`) |
-| `individual_info` | bool | `false` | Сводка по агентам (`synthetic_run.py`) |
-
-### `environment` (`EnvironmentConfig`)
-
-| Ключ | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `food_availability` | float | `10000.0` | Пищевой ресурс на шаг |
-| `food_step` | float | `0.0` | Изменение пищевой базы за шаг |
-| `temp_start` | float | `20.0` | Стартовая температура (°C) |
-| `temp_step` | float | `0.05` | Изменение температуры за шаг |
-| `temp_reset` | float | `-5.0` | Значение, к которому сбрасывается температура при достижении границ |
-| `hazard_level_start` | float | `0.1` | Стартовый уровень опасности |
-| `hazard_step` | float | `0.001` | Изменение опасности за шаг |
-| `min_temperature` | float | `-30.0` | Нижняя граница температуры |
-| `max_temperature` | float | `50.0` | Верхняя граница температуры |
-
-### `population` (`PopulationConfig`)
-
-| Ключ | Тип | По умолчанию | Описание                                              |
-|---|---|---|-------------------------------------------------------|
-| `initial_size` | int | `100` | Начальный размер популяции                            |
-| `mutation_std` | float | `0.12` | Стандартное отклонение baseline-мутации               |
-| `reproduction_rate` | float | `0.4` | Коэффициент плодовитости                              |
-| `min_reproduction_age` | int | `2` | Минимальный возраст для размножения                   |
-| `wound_base` | float | `0.4` | Базовая вероятность смерти проигравшего в конкуренции |
-| `genome_labels` | list[str] | 7 признаков | Названия генов                                        |
-
-### `individual` (`IndividualConfig`)
-
-| Ключ | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `fitness_death_threshold` | float | `0.1` | Порог fitness, ниже которого особь гибнет мгновенно |
-| `fitness_death_prob_coef` | float | `0.1` | Множитель вероятности смерти от низкого fitness |
-| `age_scale` | float | `80.0` | Масштаб возрастной смертности |
-| `age_death_power` | float | `1.2` | Показатель степени в возрастной функции смертности |
-| `food_need_size_coef` | float | `5.0` | Вклад `size` в потребность в пище |
-| `food_need_resilience_coef` | float | `2.0` | Вклад `resilience` в потребность в пище |
-| `food_need_speed_coef` | float | `1.0` | Вклад `speed` в потребность в пище |
-| `food_need_aggr_coef` | float | `10.0` | Вклад `aggressiveness` в потребность в пище |
-
-### `fitness` (`FitnessConfig`)
-
-| Ключ | Тип | По умолчанию | Описание                                       |
-|---|---|---|------------------------------------------------|
-| `temp_20_norm` | float | `0.625` | Нормированная «комфортная» температура         |
-| `temp_score_sharpness` | float | `0.5` | Жёсткость температурного штрафа                |
-| `metabolic_rate_efficiency_penalty` | float | `0.5` | Штраф эффективности от метаболизма             |
-| `resilience_efficiency_penalty` | float | `0.2` | Штраф эффективности от resilience              |
-| `aggression_metabolic_penalty` | float | `0.1` | Штраф за избыток агрессии над метаболизмом     |
-| `speed_metabolic_ratio` | float | `2.0` | Допустимое отношение `speed / metabolic_rate`  |
-| `size_metabolic_ratio` | float | `1.5` | Допустимое отношение `size / metabolic_rate`   |
-| `proportion_penalty` | float | `1.0` | Штраф за нарушение пропорций                   |
-| `score_floor` | float | `0.05` | Минимальное значение любого компонента fitness |
-
----
-
-## Сценарии
-
-Готовые пресеты `EnvironmentConfig` определены в `config/scenarios.py` и подключаются через группу `environment` в CLI:
+HTML с картой организмов, источниками пищи и статистикой:
 
 ```bash
-python3 main.py environment=warming
-python3 main.py environment=famine population.initial_size=200 n_steps=1000
+python main.py n_steps=200 seed=42 view=true
 ```
 
-| Имя | Что моделирует | Что нагружает |
-|---|---|---|
-| `default` | Базовые значения | — |
-| `stable` | Статичная среда, без климатического давления | Контрольный baseline |
-| `warming` | Длительное монотонное потепление с холодного старта | `heat_resistance` |
-| `ice_age` | Похолодание + сжатие пищевой базы | `cold_resistance`, метаболизм |
-| `harsh_seasons` | Быстрые тепловые циклы (~150 шагов на цикл) | Двусторонняя терморегуляция |
-| `famine` | Дефицит еды (≈4× ниже нормы), убывающая пищевая база | Конкуренция, `size`, метаболизм |
-| `hazardous` | Уровень опасности растёт в 5× быстрее, старт выше | `resilience` |
-| `chaos` | Сезонность + растущая опасность + дефицит еды одновременно | Стресс-тест |
+Результат: `artifacts/plots/spatial/world.html`. Откройте файл в браузере; сервер не нужен. По умолчанию сохраняется каждый шаг. Ползунок и поле «Шаг» выбирают кадр, «Шаг воспроизведения» задаёт интервал анимации. При наведении на организм показано его поле зрения.
 
----
+Для уменьшения числа сохранённых кадров задайте `spatial_view_interval=5` — расчёт по-прежнему выполняет каждый шаг, а в HTML будут доступны сохранённые кадры. Нулевой и последний шаги сохраняются всегда.
 
-## Примеры
-
-Полный прогон `Engine`:
+Экспорт статистики пространственного режима в CSV:
 
 ```bash
-python3 main.py
+python main.py n_steps=300 seed=42 spatial_csv=artifacts/spatial_history.csv
 ```
 
-Увеличенная сила нейросдвига и фиксированный сид:
+CSV содержит численность, энергию, рождения и причины смертей, fitness, параметры среды, запасы пищи и средние значения генов. Его можно сохранять одновременно с HTML через `view=true`.
+
+Классический режим:
 
 ```bash
-python3 main.py shift_strength=0.9 seed=7
+python main.py mode=classic n_steps=300 model_info=true
+python main.py mode=classic n_steps=200 view=true
 ```
 
-Сценарий + переопределение популяции:
+Графики классического режима сохраняются в `artifacts/plots/simulation/`.
+
+## Конфигурация и сценарии
+
+CLI использует Hydra: переопределения передаются как `ключ=значение`, вложенные параметры — через точку. Запускайте команды из корня проекта.
 
 ```bash
-python3 main.py environment=harsh_seasons population.initial_size=200 n_steps=1200
+python main.py environment=famine n_steps=500 seed=45
+python main.py spatial.initial_population=150 spatial.max_population=600
+python main.py --cfg job
+python main.py --help
 ```
 
-Одиночный baseline-прогон с печатью метрик модели:
+| Группа | Назначение |
+| --- | --- |
+| `environment` | Температура, опасность, доступность и восстановление пищи |
+| `population` | Геном и конкуренция; численность и размножение classic |
+| `individual` | Метаболизм, потребность в пище, возрастная смертность |
+| `fitness` | Коэффициенты приспособленности |
+| `spatial` | Размер мира, численность spatial, движение, источники, локальное размножение |
+| `spatial_guidance` | CatBoost для мутаций потомства в spatial |
+| `spatial_cnn` | CNN для выбора поведения и пространственной цели |
+
+Сценарии: `default`, `stable`, `warming`, `ice_age`, `harsh_seasons`, `famine`, `hazardous`, `chaos`. Их определения: [config/scenarios.py](config/scenarios.py).
+
+Все сценарии работают в обоих режимах. В spatial ёмкость и начальный запас источника умножаются на `environment.food_availability / 10000`, а скорость восстановления — на `environment.food_regeneration_rate`. Например, `famine` при настройках по умолчанию даёт 25 единиц запаса и восстановление 1.5 единицы за шаг на источник. Новые источники получают те же параметры; число источников и радиус питания задаются через `spatial.*`.
+
+В classic `food_regeneration_rate` задаёт долю недостающей пищи, восстанавливаемую за шаг. Температура и опасность в обоих режимах отражаются от заданных границ.
+
+Значения по умолчанию и проверки параметров: [config/sim_config.py](config/sim_config.py).
+
+| Точка входа | Конфигурация |
+| --- | --- |
+| `python main.py` | `config/sim_config.yaml` |
+| `python -m neural.advisor_training` | `config/advisor_config.yaml` |
+| `python comparison_run.py` | `config/compare_config.yaml` |
+
+Hydra сохраняет параметры запуска и логи в `artifacts/hydra/`.
+
+## Машинное обучение
+
+CatBoost и CNN решают разные задачи и включаются отдельно. CatBoost — градиентный бустинг, который направляет мутации генома. CNN имитирует выбор поведения и цели; логика движения, питания и размножения остаётся в ядре.
+
+### CatBoost: обучение и подключение
+
+Обучение пространственного советчика на независимых baseline-прогонах:
 
 ```bash
-python3 synthetic_run.py n_steps=200 model_info=true
+python -m neural.advisor_training simulation.mode=spatial simulation.n_steps=300 \
+  training_runs=2 validation_runs=1
+python main.py spatial_guidance.enabled=true n_steps=300
 ```
 
-Сбор обучающей выборки для нейросоветчика:
+Сбор данных идёт с обычной случайной мутацией. Для обучения на нескольких сценариях добавьте, например, `'training_scenarios=[stable,warming,ice_age,famine]'`. `training_runs` задаёт число seed на каждый сценарий, `validation_runs` — число отдельных проверочных seed. Параметры среды для одного прогона можно выбрать через `environment@simulation.environment=warming`.
+
+Обучение классического советчика и сравнение двух ветвей:
 
 ```bash
-python3 synthetic_run.py n_steps=1000 record=true output_path=data/run_01.json
+python -m neural.advisor_training simulation.mode=classic simulation.n_steps=300
+python comparison_run.py simulation.n_steps=300 view=true
 ```
 
-Полный дебаг-прогон с пошаговыми логами:
+Модели сохраняются в `artifacts/models/`: `spatial_advisor.cbm` и `classic_advisor.cbm`; рядом создаётся отчёт `.cbm.json`. Симуляция загружает готовый советчик с фиксированными весами. `spatial_guidance.advisor_path` задаёт путь в spatial, `advisor_path` — в сравнении classic.
+
+Сравнительный дашборд: `artifacts/dashboards/comparison/dashboard.html`. Он загружает Plotly через CDN и требует доступа к сети. `comparison_run.py` поддерживает только `classic` и требует предварительно обученной модели.
+
+### CNN: обучение и загрузка
+
+Для обучения явно передайте пустой `model_path`:
 
 ```bash
-python3 synthetic_run.py n_steps=50 debug=true population_info=true individual_info=true
+python main.py spatial_cnn.enabled=true 'spatial_cnn.model_path=""' \
+  spatial_cnn.device=auto n_steps=0
 ```
 
-Базовая визуализация (Plotly-графики в `vis/graphics/`):
+`spatial_cnn.training_steps` задаёт длительность каждого обучающего прогона учителя, `training_runs` — их количество. `n_steps` управляет последующей симуляцией; в примере она содержит ноль шагов. CNN учится на примерах выбора поведения и видимой целевой ячейки эвристикой, а выживаемость оценивается отдельными прогонами.
+
+Обучение сохраняет веса в `artifacts/models/spatial_target_policy.pt` и отчёт `.pt.json`. Для другого файла задайте `spatial_cnn.save_path`. `device=auto` выбирает CUDA, затем Apple MPS, затем CPU; инференс выполняется на CPU.
+
+Загрузка готовых весов:
 
 ```bash
-python3 vis/vis_demo.py
+python main.py spatial_cnn.enabled=true n_steps=200 view=true
 ```
 
----
+При непустом `model_path` запускается загрузка; отсутствие файла приводит к ошибке. После свежего клонирования сначала обучите модель или получите совместимые веса отдельно.
 
-## Сравнительный дашборд
+По умолчанию `model_path=artifacts/models/spatial_target_policy.pt`, поэтому одного `spatial_cnn.enabled=true` достаточно для загрузки. Путь выводится как `CNN model loaded: ...`. Показанные при загрузке метрики взяты из сохранённого отчёта обучения.
 
-```bash
-python3 main.py view=true
-python3 main.py view=true environment=warming seed=7
-python3 main.py view=true environment=harsh_seasons population.initial_size=200 n_steps=1200
-```
-### Что внутри
+Файл модели содержит геометрию карт, порядок каналов и генов, радиус размножения. Эти параметры проверяются при загрузке; для другой геометрии нужны соответствующие веса. CatBoost и CNN можно включить одновременно, добавив `spatial_guidance.enabled=true` к запуску готовой CNN.
 
-- **Animated scatter (heat × cold).** Каждая точка — особь на двумерной проекции пространства признаков (по умолчанию `heat_resistance × cold_resistance`); цвет точки кодирует fitness (синяя гамма — baseline, красная — neural-guided). Внизу — кнопки play/pause и слайдер по поколениям для покадрового просмотра.
-- **Comparison table.** Итоги двух ветвей по четырём метрикам:
-  - финальная численность,
-  - средний fitness в хвостовом окне (последние 50 шагов),
-  - скорость адаптации — slope линейной аппроксимации `AvgFitness(generation)`,
-  - сколько шагов реально прожили (до экстинкции либо до `n_steps`).
-
-  В каждой строке лучшее значение подсвечивается зелёным.
-
-### Ось проекции
-
-В animated scatter оси задаются через параметры `x_trait` и `y_trait` в `SimConfig` (по умолчанию — `heat_resistance × cold_resistance`). Любое имя из `population.genome_labels` валидно:
+## Тесты
 
 ```bash
-python3 main.py view=true x_trait=size y_trait=speed
-python3 main.py view=true environment=warming x_trait=heat_resistance y_trait=metabolic_rate
+python -m pytest -q
+python tests_run.py
+python -m pytest -q tests/spatial_tests.py
 ```
 
----
+Обнаружение файлов `*_tests.py` настроено в `pytest.ini`. Набор проверяет ядро, конфигурации, точки входа, пространственное поведение, визуализацию и ML-компоненты.
 
-## Профилирование
+## Структура проекта
 
-Профайлер прогоняет симуляцию под `cProfile` и собирает три артефакта в каталоге `reports/`:
+Основные каталоги и точки входа:
 
-| Файл | Назначение |
-|---|---|
-| `evosim.prof` | Бинарный дамп `cProfile` |
-| `cprofile_summary.txt` | Текстовая сводка top-N по cumtime + tottime + callers |
-| `profiling_report.html` | HTML-отчёт по коду проекта |
-
-Импорты `mesa` / `numpy` / `pandas` / `scipy` / `catboost` в профилирование не включаются — фильтр в `profiling/stats.py` оставляет только функции из проекта.
-
-### `ProfilerConfig`
-
-Конфиг профайлера оборачивает `SimConfig` под ключом `simulation_config`. Параметры симуляции переопределяются через этот префикс:
-
-```bash
-python3 profile_run.py simulation_config.n_steps=500
-python3 profile_run.py simulation_config.environment=warming
-python3 profile_run.py simulation_config.population.initial_size=300 top_n_flame=25
-```
-
-| Ключ | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `simulation_config` | `SimConfig` | дефолты | Конфиг прогоняемой симуляции |
-| `output_dir` | str | `reports` | Каталог для всех артефактов |
-| `prof_filename` | str | `evosim.prof` | Имя `.prof` дампа |
-| `text_summary_filename` | str | `cprofile_summary.txt` | Имя текстовой сводки |
-| `html_report_filename` | str | `profiling_report.html` | Имя HTML-отчёта |
-| `top_n_text` | int | `50` | Сколько строк включать в текстовую сводку |
-| `top_n_callers` | int | `10` | Сколько горячих функций раскрывать в секции callers |
-| `top_n_flame` | int | `15` | Сколько строк показывать во флеймчарте HTML |
-| `top_n_console` | int | `15` | Сколько строк печатать в stdout по завершении |
-| `view` | bool | `false` | Автоматически открыть HTML-отчёт в браузере |
-
-### Примеры
-
-Базовый прогон, 200 шагов:
-
-```bash
-python3 profile_run.py simulation_config.n_steps=200
-```
-
-С автооткрытием HTML-отчёта:
-
-```bash
-python3 profile_run.py simulation_config.n_steps=500 view=true
-```
-
-Углублённый анализ — больше callers и больше строк во флеймчарте:
-
-```bash
-python3 profile_run.py simulation_config.n_steps=500 top_n_callers=20 top_n_flame=25
-```
-
-Профилирование с увеличенным стартовым размером популяции:
-
-```bash
-python3 profile_run.py simulation_config.n_steps=1000 simulation_config.population.initial_size=300
+```text
+evosim/
+├── config/                # dataclass-схемы, валидация, Hydra, сценарии
+├── core/                  # модели, агенты, среда, генетика, fitness
+├── neural/                # CatBoost, CNN, сбор данных и обучение
+│   ├── advisor_training.py # отдельное обучение CatBoost: python -m neural.advisor_training
+│   └── cnn_training.py     # сбор примеров, обучение и загрузка CNN через main.py
+├── vis/                   # Plotly-графики, карта, сравнительный дашборд
+├── tests/                 # тестовый набор pytest
+├── artifacts/             # локальные результаты; исключены из Git
+├── main.py                # пространственный или классический прогон
+├── comparison_run.py      # classic: baseline против CatBoost
+├── tests_run.py           # запуск тестов
+├── pytest.ini
+└── requirements.txt
 ```

@@ -1,16 +1,21 @@
 from pathlib import Path
 
+from config.output_paths import VIS_DEMO_PLOTS_DIR
 from config.sim_config import SimConfig
 from core.model import Model
 from vis.history import collect_history
 from vis.plots import build_all_figures, save_figures
 
 
-def run_visualization_demo(n_steps: int = 600, seed: int = 0, output_dir: str | Path = "graphics") -> None:
+def run_visualization_demo(
+    n_steps: int = 600,
+    seed: int = 0,
+    output_dir: str | Path = VIS_DEMO_PLOTS_DIR,
+) -> None:
     """
     Run one simulation and save all basic visualization figures.
     """
-    config = SimConfig(seed=seed, n_steps=n_steps, debug=False, record=False)
+    config = SimConfig(seed=seed, n_steps=n_steps, debug=False)
     model = Model(config)
 
     history_df = collect_history(model, n_steps=n_steps)
