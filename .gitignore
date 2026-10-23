@@ -1,9 +1,9 @@
-__pycache__/
 .venv/
-data/
-.idea/
-catboost_info/
-*.cbm
-models/*.cbm
+__pycache__/
+.pytest_cache/
+.mypy_cache/
 .benchmarks/
-/artifacts
+.idea/
+/artifacts/
+catboost_info/
+docs/
