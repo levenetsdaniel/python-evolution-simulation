@@ -189,6 +189,76 @@ class AdvisorTrainingConfig:
     save_path: str = ""  # Defaults to artifacts/models/<simulation.mode>_advisor.cbm.
 
 
+@dataclass
+class SpatialCurriculumConfig:
+    group_count: int = 2
+    group_size: int = 4
+    partner_distance: float = 16.0
+    depleted_stock_fraction: float = 0.05
+
+
+@dataclass
+class PPOTrainingConfig:
+    """Offline shared-policy PPO on behavioral spatial tasks."""
+
+    simulation: SimConfig = field(default_factory=SimConfig)
+    curriculum: SpatialCurriculumConfig = field(default_factory=SpatialCurriculumConfig)
+    training_scenarios: list[str] = field(default_factory=lambda: [
+        "sparse_population", "separated_mates", "depleted_food"])
+    validation_scenarios: list[str] = field(default_factory=lambda: [
+        "sparse_population", "separated_mates", "depleted_food", "baseline"])
+    device: str = "auto"
+    threads: int = 1
+    iterations: int = 20
+    rollout_steps: int = 16
+    episode_steps: int = 200
+    validation_steps: int = 200
+    validation_runs: int = 2
+    validation_interval: int = 5
+    epochs: int = 4
+    batch_size: int = 64
+    learning_rate: float = 0.0001
+    gamma: float = 0.99
+    gae_lambda: float = 0.95
+    clip_ratio: float = 0.2
+    entropy_coef: float = 0.01
+    value_coef: float = 0.5
+    max_grad_norm: float = 0.5
+    survival_reward: float = 0.01
+    energy_reward: float = 0.1
+    birth_reward: float = 2.0
+    low_density_bonus: float = 2.0
+    local_population_target: int = 8
+    offspring_survival_steps: int = 5
+    offspring_survival_reward: float = 0.5
+    death_penalty: float = 1.0
+    initial_model_path: str = "artifacts/models/spatial_target_policy.pt"
+    save_path: str = "artifacts/models/spatial_ppo_policy.pt"
+
+
+@dataclass
+class PolicyEvaluationConfig:
+    """Paired, held-out comparisons of saved spatial policies."""
+
+    simulation: SimConfig = field(default_factory=SimConfig)
+    curriculum: SpatialCurriculumConfig = field(
+        default_factory=lambda: SpatialCurriculumConfig(group_count=4, group_size=6))
+    models: dict[str, str] = field(default_factory=lambda: {
+        "cnn": "artifacts/models/spatial_target_policy.pt",
+        "ppo_pilot": "artifacts/models/spatial_ppo_policy.pt",
+        "ppo_large": "artifacts/models/spatial_ppo_large_policy.pt",
+    })
+    baseline: str = "cnn"
+    environments: list[str] = field(default_factory=lambda: ["stable", "warming", "famine"])
+    behavior_scenarios: list[str] = field(default_factory=lambda: [
+        "sparse_population", "separated_mates", "depleted_food"])
+    seeds: list[int] = field(default_factory=lambda: list(range(2000042, 2000050)))
+    steps: int = 500
+    threads: int = 1
+    workers: int = 1
+    output_prefix: str = "artifacts/analysis/ppo_large_comparison"
+
+
 def validate_sim_config(config: SimConfig) -> None:
     """Reject invalid simulation parameters before the model starts."""
     environment = config.environment

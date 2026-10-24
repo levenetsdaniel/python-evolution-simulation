@@ -1,0 +1,9 @@
+defaults:
+  - policy_evaluation_schema
+  - _self_
+
+hydra:
+  run:
+    dir: artifacts/hydra/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

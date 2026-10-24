@@ -34,7 +34,10 @@ def main(cfg: SimConfig) -> None:
                 raise
             world.policy = build_cnn_policy(cfg)
             report = world.policy.training_report
-            if report:
+            if report.get("algorithm") == "ppo":
+                print(f"PPO policy: selected update {report['best_iteration']}/{report['updates']}; "
+                      f"best validation score: {report['best_validation']['score']:.3f}")
+            elif report:
                 print(f"CNN validation loss: {report['validation_loss']:.6f}; "
                       f"goal accuracy: {report['goal_accuracy']:.1%}; "
                       f"target accuracy: {report['target_accuracy']:.1%}; "

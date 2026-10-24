@@ -132,6 +132,11 @@ class CNNPolicy:
                 raise ValueError("CNN produced a non-finite target prediction")
             goals = goal_logits.argmax(dim=1).tolist()
             cells = target_logits.flatten(2).argmax(dim=2).tolist()
+        return self.decode_targets(goals, cells)
+
+    def decode_targets(self, goals: list[int], cells: list[list[int]]) -> list[SpatialTarget]:
+        """Decode goal/cell decisions for imitation and reinforcement policies."""
+        size = self.metadata["map_size"]
         selected = []
         for index, goal in enumerate(goals):
             kind = GOAL_NAMES[goal]
@@ -167,6 +172,9 @@ class CNNPolicy:
         if not Path(path).is_file():
             raise FileNotFoundError(f"CNN model file does not exist: {path}")
         checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+        if checkpoint.get("algorithm") == "ppo":
+            from .ppo_policy import PPOPolicy
+            return PPOPolicy.load(path, config)
         with torch.random.fork_rng(devices=[]):
             policy = cls(TargetCNN(config.spatial.nearby_map_span / config.spatial.local_map_span), config)
         if checkpoint.get("metadata") != policy.metadata:

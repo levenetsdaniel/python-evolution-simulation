@@ -89,6 +89,8 @@ class SpatialObservation:
     is_female: bool = False
     mating_distance: float = 0.0
     nearby_map: np.ndarray | None = None
+    visible_population: int = 0
+    visible_mates: int = 0
 
 
 class SpatialObservationProvider:
@@ -148,9 +150,10 @@ class SpatialObservationProvider:
         food = None
         if nearest is not None:
             food = FoodObservation(nearest.x, nearest.y, hypot(nearest.x - state.x, nearest.y - state.y))
+        neighbors = [agent for agent in world.space.get_neighbors(individual.pos, world.perception(individual))
+                     if agent is not individual and agent.is_alive]
         mates = [(hypot(agent.state.x - state.x, agent.state.y - state.y), agent.unique_id, agent)
-                 for agent in world.space.get_neighbors(individual.pos, world.perception(individual))
-                 if agent is not individual and agent.gender != individual.gender
+                 for agent in neighbors if agent.gender != individual.gender
                  and world.population.can_reproduce(agent)]
         mate = None
         if mates:
@@ -161,7 +164,8 @@ class SpatialObservationProvider:
                                   tuple(float(gene) for gene in individual.genome), world.speed(individual),
                                   mate, world.population.can_reproduce(individual), individual.foraging,
                                   individual.gender == Gender.FEMALE, world.mating_distance,
-                                  self.local_map(world, individual, span=world.config.nearby_map_span))
+                                  self.local_map(world, individual, span=world.config.nearby_map_span),
+                                  len(neighbors), len(mates))
 
 
 class HeuristicPolicy:

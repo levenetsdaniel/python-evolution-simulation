@@ -1,0 +1,24 @@
+defaults:
+  - ppo_config
+  - _self_
+
+# On-policy experience is collected afresh from four behavioral tasks.
+initial_model_path: artifacts/models/spatial_ppo_policy.pt
+save_path: artifacts/models/spatial_ppo_large_policy.pt
+device: auto
+iterations: 160
+rollout_steps: 32
+episode_steps: 300
+validation_steps: 200
+validation_runs: 3
+validation_interval: 40
+batch_size: 128
+training_scenarios: [sparse_population, separated_mates, depleted_food, baseline]
+curriculum:
+  group_count: 4
+  group_size: 6
+simulation:
+  seed: 1042
+  spatial:
+    initial_population: 32
+    max_population: 128

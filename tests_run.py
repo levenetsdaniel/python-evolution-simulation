@@ -31,6 +31,7 @@ TEST_FILES = [
     "tests/spatial_observation_tests.py",
     "tests/spatial_policy_tests.py",
     "tests/cnn_policy_tests.py",
+    "tests/ppo_tests.py",
     "tests/advisor_training_tests.py",
 ]
 
